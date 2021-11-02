@@ -1,0 +1,24 @@
+[package]
+authors = ["QingGo <zyqingjohn@qq.com>"]
+description = "A key-value store"
+edition = "2021"
+name = "kvs"
+version = "0.1.0"
+
+[dev-dependencies]
+assert_cmd = "0.11.0"
+predicates = "1.0.0"
+
+[lib]
+doctest = false
+test = false
+
+[[bin]]
+doctest = false
+name = "kvs"
+test = false
+
+[features]
+
+[dependencies]
+clap = "3.0.0-beta.5"

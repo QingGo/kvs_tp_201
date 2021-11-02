@@ -1,0 +1,1 @@
+Create a simple key-value database along with Telent Plan 201 course of PingCAP: https://github.com/pingcap/talent-plan
