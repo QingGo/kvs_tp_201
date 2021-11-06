@@ -45,7 +45,7 @@ pub struct VecByte(Vec<u8>);
 impl Read for VecByte {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let mut len = 0;
-        if self.0.len() > 0 {
+        if !self.0.is_empty() {
             len = self.0.len().min(buf.len());
             buf[..len].copy_from_slice(&self.0[..len]);
             self.0.drain(..len);
@@ -81,7 +81,7 @@ fn main() -> Result<(), anyhow::Error> {
     {
         let mut writer = io::BufWriter::new(&file);
         let serialized = serde_json::to_string(&a)?;
-        writer.write(serialized.as_bytes())?;
+        writer.write_all(serialized.as_bytes())?;
         writer.flush()?;
     }
 

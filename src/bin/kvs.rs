@@ -1,5 +1,5 @@
 use clap::Parser;
-use kvs::KvStore;
+use kvs::{KvStore, KvsError, Result};
 
 #[derive(Parser)]
 #[clap(version = env!("CARGO_PKG_VERSION"), author = "QingGo")]
@@ -12,25 +12,36 @@ struct Opts {
     value: Option<String>,
 }
 
-fn main() {
+fn main() -> Result<()> {
     let opts: Opts = Opts::parse();
-    let _db = KvStore::new();
+    let mut db = KvStore::open(".")?;
+    // db.set("333".to_string(),"3333".to_string())?;
     match opts.command.as_str() {
         "get" => {
-            panic!("unimplemented");
-            // db.get(opts.key).unwrap();
+            if let Some(value) = opts.value {
+                Err(KvsError::UnexpectedCommand(format!("{:?}", value)))?;
+            }
+            let record = db.get(opts.key)?;
+            record
+                .map(|r| println!("{}", r))
+                .unwrap_or_else(|| println!("Key not found"));
         }
         "set" => {
-            panic!("unimplemented");
-            // db.set(opts.key, opts.value.unwrap()).unwrap();
+            db.set(opts.key, opts.value.unwrap())?;
         }
         "rm" => {
-            panic!("unimplemented");
-            // db.remove(opts.key);
+            db.remove(opts.key).map_err(|err| {
+                // If the key does not exist, it prints "Key not found", and exits with a non-zero error code
+                if let KvsError::KeyNotFound(_) = err {
+                    println!("Key not found");
+                }
+                err
+            })?;
         }
         _ => {
             println!("Unknown command: {}", opts.command);
             panic!();
         }
     }
+    Ok(())
 }
