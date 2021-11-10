@@ -20,8 +20,7 @@ fn get_root_logger() -> slog::Logger {
     let decorator = slog_term::TermDecorator::new().build();
     let drain = slog_term::FullFormat::new(decorator).build().fuse();
     let drain = slog_async::Async::new(drain).build().fuse();
-    let root_logger = slog::Logger::root(drain, o!("process" => "redis_ping_client"));
-    root_logger
+    slog::Logger::root(drain, o!("process" => "redis_ping_client"))
 }
 
 // can not connect to real redis server for unknown reason
@@ -57,8 +56,11 @@ fn encode_input(input: &str) -> String {
     let commands = Vec::from_iter(
         commands_string
             .iter()
-            .map(|s| Box::new(RESP::BulkString(s.to_string()))),
+            .map(|s| RESP::BulkString(s.to_string())),
     );
     let input = RESP::Array(commands);
-    serde_json::to_string(&input).unwrap().trim_matches('"').to_string()
+    serde_json::to_string(&input)
+        .unwrap()
+        .trim_matches('"')
+        .to_string()
 }

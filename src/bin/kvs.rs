@@ -22,7 +22,7 @@ fn main() -> Result<()> {
     match opts.command.as_str() {
         "get" => {
             if let Some(value) = opts.value {
-                Err(KvsError::UnexpectedCommand(format!("{:?}", value)))?;
+                return Err(KvsError::UnexpectedCommand(format!("{:?}", value)));
             }
             let record = db.get(opts.key)?;
             record
@@ -46,6 +46,6 @@ fn main() -> Result<()> {
             panic!();
         }
     }
-    
+
     Ok(())
 }

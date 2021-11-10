@@ -7,7 +7,7 @@ use std::fs;
 use std::fs::File;
 use std::io;
 use std::io::prelude::*;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time;
 
 use super::error::KvsError;
@@ -132,7 +132,7 @@ impl KvStore {
             tstamp: time::SystemTime::now()
                 .duration_since(time::UNIX_EPOCH)?
                 .as_micros(),
-            key: key.clone(),
+            key,
             value,
         };
         self.insert_record(record)?;
@@ -168,7 +168,7 @@ impl KvStore {
     }
 
     fn get_last_file(&self) -> Result<&File> {
-        Ok(&self.file_handles.get(&self.active_file_id).unwrap())
+        Ok(self.file_handles.get(&self.active_file_id).unwrap())
     }
 
     fn compact(&mut self) -> Result<()> {
@@ -203,7 +203,7 @@ impl KvStore {
     }
 }
 
-fn get_db_files_ids(dir: &PathBuf) -> Result<Vec<u64>> {
+fn get_db_files_ids(dir: &Path) -> Result<Vec<u64>> {
     let mut files_ids = fs::read_dir(&dir)?
         .flat_map(|entry| -> Result<_> { Ok(entry?.path()) })
         .filter(|path| path.is_file() && path.extension().unwrap_or_default() == "db")
@@ -214,11 +214,11 @@ fn get_db_files_ids(dir: &PathBuf) -> Result<Vec<u64>> {
         })
         .flatten()
         .collect::<Vec<u64>>();
-    files_ids.sort();
+    files_ids.sort_unstable();
     Ok(files_ids)
 }
 
-fn get_file_handles(dir: &PathBuf, file_ids: &Vec<u64>) -> Result<BTreeMap<u64, File>> {
+fn get_file_handles(dir: &Path, file_ids: &[u64]) -> Result<BTreeMap<u64, File>> {
     let mut handles = BTreeMap::new();
     for file_id in file_ids {
         let file_path = dir.join(format!("{}.db", file_id));
@@ -269,7 +269,7 @@ fn build_indexes(file_handles: &mut BTreeMap<u64, File>) -> Result<(HashMap<Stri
     Ok((indexes, uncompacted_size))
 }
 
-fn generate_new_file(path: &PathBuf, file_id: u64) -> Result<File> {
+fn generate_new_file(path: &Path, file_id: u64) -> Result<File> {
     let file_path = path.join(format!("{}.db", file_id));
     let file_handle = fs::OpenOptions::new()
         .write(true)

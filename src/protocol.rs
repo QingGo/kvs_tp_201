@@ -7,11 +7,11 @@ pub enum RESP {
     SimpleString(String),
     Error(String),
     BulkString(String),
-    Array(Vec<Box<RESP>>),
+    Array(Vec<RESP>),
 }
 
 impl RESP {
-    fn to_string(&self) -> String {
+    fn serialize(&self) -> String {
         match self {
             RESP::SimpleString(s) => format!("+{}\r\n", s),
             RESP::Error(s) => format!("-{}\r\n", s),
@@ -20,7 +20,7 @@ impl RESP {
                 let mut s = String::new();
                 s.push_str(format!("*{}\r\n", v.len()).as_str());
                 for c in v {
-                    s.push_str(&c.to_string());
+                    s.push_str(&c.serialize());
                 }
                 s
             }
@@ -28,25 +28,21 @@ impl RESP {
     }
 
     // implenent parser from redis command
-    fn from_string(s: &str) -> Result<RESP> {
+    fn deserialize(s: &str) -> Result<RESP> {
         let mut iter = s.split_whitespace();
-        RESP::_from_string(&mut iter)
+        RESP::_deserialize(&mut iter)
     }
 
-    fn _from_string(iter: &mut str::SplitWhitespace) -> Result<RESP> {
+    fn _deserialize(iter: &mut str::SplitWhitespace) -> Result<RESP> {
         let cmd = iter.next().unwrap();
         match cmd.chars().next() {
-            Some('+') => Ok(RESP::SimpleString(
-                cmd[1..].to_string(),
-            )),
-            Some('-') => Ok(RESP::Error(
-                cmd[1..].to_string(),
-            )),
+            Some('+') => Ok(RESP::SimpleString(cmd[1..].to_string())),
+            Some('-') => Ok(RESP::Error(cmd[1..].to_string())),
             Some('$') => {
                 let len = cmd[1..].parse::<usize>()?;
                 let s = iter
                     .next()
-                    .ok_or(anyhow::anyhow!("invalid command"))?
+                    .ok_or_else(|| anyhow::anyhow!("invalid command"))?
                     .to_string();
                 if s.len() != len {
                     return Err(anyhow::anyhow!("invalid command"));
@@ -57,7 +53,7 @@ impl RESP {
                 let len = cmd[1..].parse::<usize>()?;
                 let mut v = Vec::new();
                 for _ in 0..len {
-                    v.push(Box::new(RESP::_from_string(iter)?))
+                    v.push(RESP::_deserialize(iter)?)
                 }
                 Ok(RESP::Array(v))
             }
@@ -71,7 +67,7 @@ impl Serialize for RESP {
     where
         S: ser::Serializer,
     {
-        serializer.serialize_str(self.to_string().as_str())
+        serializer.serialize_str(self.serialize().as_str())
     }
 }
 
@@ -81,6 +77,6 @@ impl<'de> Deserialize<'de> for RESP {
         D: de::Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
-        RESP::from_string(&s).map_err(de::Error::custom)
+        RESP::deserialize(&s).map_err(de::Error::custom)
     }
 }
