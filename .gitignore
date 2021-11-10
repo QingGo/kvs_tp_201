@@ -3,4 +3,5 @@ Cargo.lock
 random_moves.bson
 serde_result.json
 *.db
+kvs_test_data/
 

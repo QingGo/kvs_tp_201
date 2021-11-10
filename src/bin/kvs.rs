@@ -1,3 +1,5 @@
+use std::env::current_dir;
+
 use clap::Parser;
 use kvs::{KvStore, KvsError, Result};
 
@@ -14,8 +16,9 @@ struct Opts {
 
 fn main() -> Result<()> {
     let opts: Opts = Opts::parse();
-    let mut db = KvStore::open(".")?;
-    // db.set("333".to_string(),"3333".to_string())?;
+    let mut db = KvStore::open(current_dir()?)?;
+    // db.set("key1".to_string(), "value2".to_string())?;
+
     match opts.command.as_str() {
         "get" => {
             if let Some(value) = opts.value {
@@ -43,5 +46,6 @@ fn main() -> Result<()> {
             panic!();
         }
     }
+    
     Ok(())
 }
