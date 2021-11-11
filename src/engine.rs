@@ -226,12 +226,7 @@ fn get_db_files_ids(dir: &Path) -> Result<Vec<u64>> {
 fn get_file_handles(dir: &Path, file_ids: &[u64]) -> Result<BTreeMap<u64, File>> {
     let mut handles = BTreeMap::new();
     for file_id in file_ids {
-        let file_path = dir.join(format!("{}.db", file_id));
-        let file_handle = fs::OpenOptions::new()
-            .write(true)
-            .read(true)
-            .open(&file_path)?;
-        handles.insert(*file_id, file_handle);
+        handles.insert(*file_id, generate_new_file(dir, *file_id)?);
     }
     Ok(handles)
 }
