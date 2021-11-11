@@ -41,7 +41,6 @@ struct Index {
     file_id: u64,
     value_sz: u64,
     value_pos: u64,
-    tstamp: u128,
 }
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
@@ -77,13 +76,13 @@ impl KvStore {
         // build index
         let (indexes, uncompacted_size) = build_indexes(&mut file_handles)?;
         let active_file_id: u64;
-        if db_file_ids.len() == 0 {
+        if db_file_ids.is_empty() {
             // create new file
             let file_handle = generate_new_file(&dir, 1)?;
             file_handles.insert(1, file_handle);
             active_file_id = 1;
         } else {
-            active_file_id = db_file_ids.last().unwrap().clone();
+            active_file_id = *db_file_ids.last().unwrap();
         }
         Ok(KvStore {
             active_file_id,
@@ -107,9 +106,6 @@ impl KvStore {
                         file_id: self.active_file_id,
                         value_sz: new_pos - old_pos,
                         value_pos: old_pos,
-                        tstamp: time::SystemTime::now()
-                            .duration_since(time::UNIX_EPOCH)?
-                            .as_micros(),
                     },
                 ) {
                     self.uncompacted_size += old_index.value_sz;
@@ -262,7 +258,6 @@ fn build_indexes(file_handles: &mut BTreeMap<u64, File>) -> Result<(HashMap<Stri
                             file_id: *file_id,
                             value_sz: new_pos as u64 - pos,
                             value_pos: pos,
-                            tstamp: record.tstamp,
                         },
                     ) {
                         uncompacted_size += old_index.value_sz;
