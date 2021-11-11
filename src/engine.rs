@@ -76,10 +76,15 @@ impl KvStore {
         let mut file_handles = get_file_handles(&dir, &db_file_ids)?;
         // build index
         let (indexes, uncompacted_size) = build_indexes(&mut file_handles)?;
-        // even if last file is not full filled with, use new file instead
-        let active_file_id = db_file_ids.last().unwrap_or(&0) + 1;
-        let new_file = generate_new_file(&dir, active_file_id)?;
-        file_handles.insert(active_file_id, new_file);
+        let active_file_id: u64;
+        if db_file_ids.len() == 0 {
+            // create new file
+            let file_handle = generate_new_file(&dir, 1)?;
+            file_handles.insert(1, file_handle);
+            active_file_id = 1;
+        } else {
+            active_file_id = db_file_ids.last().unwrap().clone();
+        }
         Ok(KvStore {
             active_file_id,
             dir,
@@ -226,8 +231,11 @@ fn get_file_handles(dir: &Path, file_ids: &[u64]) -> Result<BTreeMap<u64, File>>
     let mut handles = BTreeMap::new();
     for file_id in file_ids {
         let file_path = dir.join(format!("{}.db", file_id));
-        let file = File::open(&file_path)?;
-        handles.insert(*file_id, file);
+        let file_handle = fs::OpenOptions::new()
+            .write(true)
+            .read(true)
+            .open(&file_path)?;
+        handles.insert(*file_id, file_handle);
     }
     Ok(handles)
 }
