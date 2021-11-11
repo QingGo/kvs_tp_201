@@ -1,6 +1,7 @@
 #![deny(missing_docs)]
 //! A simple library for a simple KV in-memory database.
 use serde::{Deserialize, Serialize};
+use std::backtrace::Backtrace;
 use std::collections::{BTreeMap, HashMap};
 use std::ffi::OsStr;
 use std::fs;
@@ -113,7 +114,10 @@ impl KvStore {
                 if let Some(old_index) = self.indexes.remove(&record.key) {
                     self.uncompacted_size += old_index.value_sz;
                 } else {
-                    return Err(KvsError::KeyNotFound(record.key));
+                    return Err(KvsError::KeyNotFound {
+                        key: record.key,
+                        backtrace: Backtrace::force_capture(),
+                    });
                 }
             }
             _ => {}

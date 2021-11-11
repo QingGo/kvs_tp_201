@@ -1,4 +1,5 @@
-use std::env::current_dir;
+#![feature(backtrace)]
+use std::{backtrace::Backtrace, env::current_dir};
 
 use clap::Parser;
 use kvs::{KvStore, KvsError, Result};
@@ -22,7 +23,10 @@ fn main() -> Result<()> {
     match opts.command.as_str() {
         "get" => {
             if let Some(value) = opts.value {
-                return Err(KvsError::UnexpectedCommand(format!("{:?}", value)));
+                return Err(KvsError::UnexpectedCommand {
+                    command: format!("{:?}", value),
+                    backtrace: Backtrace::force_capture(),
+                });
             }
             let record = db.get(opts.key)?;
             record
@@ -35,7 +39,11 @@ fn main() -> Result<()> {
         "rm" => {
             db.remove(opts.key).map_err(|err| {
                 // If the key does not exist, it prints "Key not found", and exits with a non-zero error code
-                if let KvsError::KeyNotFound(_) = err {
+                if let KvsError::KeyNotFound {
+                    key: _,
+                    backtrace: _,
+                } = err
+                {
                     println!("Key not found");
                 }
                 err

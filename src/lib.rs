@@ -1,3 +1,4 @@
+#![feature(backtrace)]
 mod engine;
 mod error;
 mod protocol;
