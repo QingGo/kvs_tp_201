@@ -19,3 +19,4 @@ pub mod utils;
 pub use engine::*;
 pub use error::*;
 pub use protocol::*;
+pub use kvs_engine::*;
