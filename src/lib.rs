@@ -8,17 +8,13 @@ extern crate anyhow;
 
 mod engine;
 mod error;
-mod protocol;
-mod kvs_client;
-mod kvs_server;
-mod kvs_engine;
-mod kvs_store;
-mod sled_kvs_engine;
+mod kvs;
+mod redis_protocol;
 pub mod utils;
 
 pub use engine::*;
 pub use error::*;
-pub use protocol::*;
-pub use kvs_engine::*;
-pub use kvs_server::*;
-pub use kvs_client::*;
+pub use kvs::client::*;
+pub use kvs::engine::*;
+pub use kvs::server::*;
+pub use redis_protocol::*;
