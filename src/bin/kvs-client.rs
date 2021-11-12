@@ -4,16 +4,16 @@ extern crate slog;
 extern crate slog_async;
 extern crate slog_term;
 
-use anyhow::anyhow;
 use anyhow::Result;
 use clap::Parser;
 use kvs::utils::*;
-use lazy_static::lazy_static;
-use std::io::prelude::*;
+use kvs::KvsClient;
 
-lazy_static! {
-    static ref ROOT_LOGGER: slog::Logger = get_root_logger("kvs-server".to_string());
-}
+// If the type has a destructor, then it will not run when the process exits.
+// So log won't be printed totally more of the time.
+// lazy_static! {
+//     static ref ROOT_LOGGER: slog::Logger = get_root_logger("kvs-server".to_string());
+// }
 
 #[derive(Parser, Debug)]
 #[clap(version = env!("CARGO_PKG_VERSION"), author = "QingGo")]
@@ -29,18 +29,13 @@ struct Config {
 }
 
 fn main() -> Result<()> {
-    info!(ROOT_LOGGER, "start kvs-client"; "version" => env!("CARGO_PKG_VERSION"));
+    let root_logger: slog::Logger = get_root_logger("kvs-server".to_string());
+    info!(root_logger, "start kvs-client"; "version" => env!("CARGO_PKG_VERSION"));
     let config = Config::parse();
+    info!(root_logger, "Parse config successfully"; "config" => format!("{:?}", config));
     let ip_port = parse_ip_port(&config.addr)?;
-    let mut stream = std::net::TcpStream::connect(ip_port)?;
+
     let input = format!("{:?}", config);
-    info!(ROOT_LOGGER, "send request"; "request" => &input);
-    stream.write_all(input.as_bytes())?;
-    let mut buf = vec![0; 1024];
-    let n = stream.read(&mut buf)?;
-    if n == 0 {
-        return Err(anyhow!("server closed"));
-    }
-    info!(ROOT_LOGGER, "recv response"; "response" => &String::from_utf8_lossy(&buf[..n]).to_string());
+    KvsClient::new(ip_port, root_logger)?.send(&input)?;
     Ok(())
 }

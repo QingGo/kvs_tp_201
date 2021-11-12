@@ -2,8 +2,6 @@
 extern crate slog;
 extern crate slog_async;
 extern crate slog_term;
-#[macro_use]
-extern crate lazy_static;
 
 extern crate anyhow;
 
@@ -11,12 +9,7 @@ use anyhow::anyhow;
 use anyhow::Result;
 use clap::Parser;
 use kvs::utils::*;
-use std::io::prelude::*;
-use std::net::TcpListener;
-
-lazy_static! {
-    static ref ROOT_LOGGER: slog::Logger = get_root_logger("kvs-server".to_string());
-}
+use kvs::KvsServer;
 
 #[derive(Parser, Debug)]
 #[clap(version = env!("CARGO_PKG_VERSION"), author = "QingGo")]
@@ -31,36 +24,23 @@ struct Config {
 }
 
 fn main() -> Result<()> {
-    info!(ROOT_LOGGER, "Starting kvs-server"; "version" => env!("CARGO_PKG_VERSION"));
+    let root_logger: slog::Logger = get_root_logger("kvs-server".to_string());
+    info!(root_logger, "Starting kvs-server"; "version" => env!("CARGO_PKG_VERSION"));
     let config = Config::parse();
+    info!(root_logger, "Parse config successfully"; "config" => format!("{:?}", config));
     let last_engine = get_last_engine();
     let engine = get_engine(last_engine, config.engine)?;
     let ip_port = parse_ip_port(&config.addr)?;
     match engine.as_str() {
         "kvs" => {
-            let log = ROOT_LOGGER.new(o!("engine" => "kvs"));
-            let listener = TcpListener::bind(ip_port)?;
-            let mut buf = vec![0; 1024];
-            loop {
-                let (stream, _) = listener.accept()?;
-                loop {
-                    let mut stream = stream.try_clone()?;
-                    let n = stream.read(&mut buf)?;
-                    if n == 0 {
-                        break;
-                    }
-                    let request_string = &String::from_utf8_lossy(&buf[..n]).to_string();
-                    info!(log, "recv request"; "request" => &request_string);
-                    info!(log, "send response"; "response" => &request_string);
-                    stream.write_all(request_string.as_bytes())?;
-                }
-            }
+            let log = root_logger.new(o!("engine" => "kvs"));
+            KvsServer::new(ip_port, log)?.run()
         }
         "sled" => {
             unimplemented!()
         }
         _ => {
-            return Err(anyhow!("invalid engine name"));
+            Err(anyhow!("invalid engine name"))
         }
     }
 }

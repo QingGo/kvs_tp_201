@@ -3,7 +3,7 @@ use anyhow::Result;
 use slog::Drain;
 
 pub fn get_root_logger(process: String) -> slog::Logger {
-    let decorator = slog_term::TermDecorator::new().build();
+    let decorator = slog_term::TermDecorator::new().stderr().build();
     let drain = slog_term::FullFormat::new(decorator).build().fuse();
     let drain = slog_async::Async::new(drain).build().fuse();
     slog::Logger::root(drain, o!("process" => process))

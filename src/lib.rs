@@ -20,3 +20,5 @@ pub use engine::*;
 pub use error::*;
 pub use protocol::*;
 pub use kvs_engine::*;
+pub use kvs_server::*;
+pub use kvs_client::*;
