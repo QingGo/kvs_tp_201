@@ -27,7 +27,7 @@ impl KvsServer {
         let engine: Box<dyn KvsEngine>;
         match engine_name {
             "kvs" => engine = Box::new(KvStore::new()?),
-            "sled" => engine = Box::new(SledKvsEngine::new()),
+            "sled" => engine = Box::new(SledKvsEngine::new()?),
             _ => panic!("Unknown engine name"),
         }
         Ok(KvsServer {

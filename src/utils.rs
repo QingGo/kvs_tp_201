@@ -17,11 +17,12 @@ pub fn get_engine(last_engine: Option<String>, config_engine: Option<String>) ->
     let engine: String;
     if let Some(last_engine) = last_engine {
         if let Some(config_engine) = config_engine {
-            if config_engine != last_engine {
-                return Err(anyhow!("engine not match"));
-            } else {
-                engine = config_engine;
-            }
+            // if config_engine != last_engine {
+            //     return Err(anyhow!("engine not match"));
+            // } else {
+            //     engine = config_engine;
+            // }
+            engine = config_engine;
         } else {
             engine = last_engine;
         }

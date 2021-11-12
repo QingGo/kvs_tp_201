@@ -29,6 +29,12 @@ pub enum KvsError {
         source: time::SystemTimeError,
         backtrace: Backtrace,
     },
+    #[error("sled error")]
+    SledError {
+        #[from]
+        source: sled::Error,
+        backtrace: Backtrace,
+    },
     /// Key not found Error type for KvStore
     #[error("Key not found: {key})")]
     KeyNotFound { key: String, backtrace: Backtrace },
