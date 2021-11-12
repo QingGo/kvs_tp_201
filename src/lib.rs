@@ -15,5 +15,6 @@ pub use kvs::engine::*;
 pub use kvs::error::*;
 pub use kvs::protocol::*;
 pub use kvs::server::*;
+pub use kvs::sled_engine::*;
 pub use kvs::store::*;
 pub use redis_protocol::*;

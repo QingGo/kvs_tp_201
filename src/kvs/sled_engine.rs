@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 use std::backtrace::Backtrace;
+use std::path::PathBuf;
 
 use crate::KvsError;
 
@@ -38,6 +39,11 @@ impl KvsEngine for SledKvsEngine {
 impl SledKvsEngine {
     pub fn new() -> Result<Self> {
         let db = sled::open(".")?;
+        Ok(SledKvsEngine { db })
+    }
+
+    pub fn open(path: impl Into<PathBuf>) -> Result<Self> {
+        let db = sled::open(path.into())?;
         Ok(SledKvsEngine { db })
     }
 }
