@@ -6,15 +6,14 @@ extern crate slog_term;
 
 extern crate anyhow;
 
-mod engine;
-mod error;
 mod kvs;
 mod redis_protocol;
 pub mod utils;
 
-pub use engine::*;
-pub use error::*;
 pub use kvs::client::*;
 pub use kvs::engine::*;
+pub use kvs::error::*;
+pub use kvs::protocol::*;
 pub use kvs::server::*;
+pub use kvs::store::*;
 pub use redis_protocol::*;

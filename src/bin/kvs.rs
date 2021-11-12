@@ -2,7 +2,7 @@
 use std::{backtrace::Backtrace, env::current_dir};
 
 use clap::Parser;
-use kvs::{KvStore, KvsError, Result};
+use kvs::{KvStore, KvsEngine, KvsError, Result};
 
 #[derive(Parser)]
 #[clap(version = env!("CARGO_PKG_VERSION"), author = "QingGo")]

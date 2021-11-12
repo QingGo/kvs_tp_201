@@ -1,5 +1,7 @@
 pub mod client;
-pub mod server;
 pub mod engine;
-pub mod store;
+pub mod error;
 pub mod protocol;
+pub mod server;
+pub mod sled_engine;
+pub mod store;

@@ -2,6 +2,9 @@ use std::backtrace::Backtrace;
 use std::io;
 use std::time;
 use thiserror::Error;
+
+/// Result wrapper for KvsError
+pub type Result<T> = std::result::Result<T, KvsError>;
 /// Error type for KvStore
 #[derive(Error, Debug)]
 pub enum KvsError {
@@ -27,7 +30,7 @@ pub enum KvsError {
         backtrace: Backtrace,
     },
     /// Key not found Error type for KvStore
-    #[error("key not found: {key})")]
+    #[error("Key not found: {key})")]
     KeyNotFound { key: String, backtrace: Backtrace },
     /// Unexpected command
     #[error("unexpected command: {command})")]
@@ -35,4 +38,6 @@ pub enum KvsError {
         command: String,
         backtrace: Backtrace,
     },
+    #[error(transparent)]
+    Other(#[from] anyhow::Error), // source and Display delegate to anyhow::Error
 }

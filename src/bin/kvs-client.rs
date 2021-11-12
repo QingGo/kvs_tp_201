@@ -4,10 +4,13 @@ extern crate slog;
 extern crate slog_async;
 extern crate slog_term;
 
-use anyhow::Result;
+use kvs::Command;
+
 use clap::Parser;
 use kvs::utils::*;
+use kvs::CommandResult;
 use kvs::KvsClient;
+use kvs::Result;
 
 // If the type has a destructor, then it will not run when the process exits.
 // So log won't be printed totally more of the time.
@@ -35,7 +38,12 @@ fn main() -> Result<()> {
     info!(root_logger, "Parse config successfully"; "config" => format!("{:?}", config));
     let ip_port = parse_ip_port(&config.addr)?;
 
-    let input = format!("{:?}", config);
-    KvsClient::new(ip_port, root_logger)?.send(&input)?;
+    let command: Command = CommandResult::from((config.command, config.key, config.value)).0?;
+    let result = KvsClient::new(ip_port, root_logger)?.send(&command)?;
+    if let Some(result) = result {
+        println!("{}", result);
+    } else if let Command::Get(_) = command {
+        println!("Key not found");
+    }
     Ok(())
 }

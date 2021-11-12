@@ -5,11 +5,10 @@ extern crate slog_term;
 
 extern crate anyhow;
 
-use anyhow::anyhow;
-use anyhow::Result;
 use clap::Parser;
 use kvs::utils::*;
 use kvs::KvsServer;
+use kvs::Result;
 
 #[derive(Parser, Debug)]
 #[clap(version = env!("CARGO_PKG_VERSION"), author = "QingGo")]
@@ -31,16 +30,9 @@ fn main() -> Result<()> {
     let last_engine = get_last_engine();
     let engine = get_engine(last_engine, config.engine)?;
     let ip_port = parse_ip_port(&config.addr)?;
-    match engine.as_str() {
-        "kvs" => {
-            let log = root_logger.new(o!("engine" => "kvs"));
-            KvsServer::new(ip_port, log)?.run()
-        }
-        "sled" => {
-            unimplemented!()
-        }
-        _ => {
-            Err(anyhow!("invalid engine name"))
-        }
-    }
+
+    let log = root_logger.new(o!("engine" => "kvs"));
+    KvsServer::new(ip_port, &engine, log)?.run()?;
+
+    Ok(())
 }
