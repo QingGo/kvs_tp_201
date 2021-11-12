@@ -4,4 +4,7 @@ random_moves.bson
 serde_result.json
 *.db
 kvs_test_data/
-
+last_engine.txt
+db
+conf
+blobs
