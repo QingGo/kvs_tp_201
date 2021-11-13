@@ -1,0 +1,18 @@
+write_bench/kvs         time:   [9.2881 ms 9.3929 ms 9.5082 ms]                             
+Found 6 outliers among 100 measurements (6.00%)
+  4 (4.00%) high mild
+  2 (2.00%) high severe
+write_bench/sled        time:   [23.524 ms 23.862 ms 24.220 ms]                             
+Found 4 outliers among 100 measurements (4.00%)
+  3 (3.00%) high mild
+  1 (1.00%) high severe
+
+Benchmarking read_bench/kvs: Warming up for 3.0000 s
+Warning: Unable to complete 20 samples in 5.0s. You may wish to increase target time to 263.9s, or reduce sample count to 10.
+read_bench/kvs          time:   [13.205 s 13.239 s 13.271 s]                            
+Found 2 outliers among 20 measurements (10.00%)
+  1 (5.00%) low mild
+  1 (5.00%) high mild
+read_bench/sled         time:   [18.179 ms 18.623 ms 19.146 ms]                           
+Found 1 outliers among 20 measurements (5.00%)
+  1 (5.00%) high severe

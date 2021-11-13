@@ -7,6 +7,14 @@ use rand::prelude::*;
 use rand::{rngs::SmallRng, SeedableRng};
 use tempfile::TempDir;
 
+/// # if you want to run the benchmarks on an otherwise unloaded machine
+/// rustup target add x86_64-unknown-linux-gnu
+/// # get linux linker toolchain
+/// brew tap SergioBenitez/osxct
+/// brew install x86_64-unknown-linux-gnu
+/// CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=x86_64-unknown-linux-gnu-gcc cargo bench --no-run --target x86_64-unknown-linux-gnu
+/// copy to binary in target/x86_64-unknown-linux-gnu/release/deps/benchmark-xxx and run benchmark-xxx --bench
+
 fn get_random_ascii_string_by_rng(rng: &mut SmallRng, size: usize) -> String {
     (0..size)
         .map(|_| {
