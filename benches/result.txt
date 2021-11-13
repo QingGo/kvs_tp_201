@@ -1,37 +1,20 @@
-Benchmarking set_bench/kvs: Warming up for 3.0000 s
-Warning: Unable to complete 100 samples in 5.0s. You may wish to increase target time to 16.4s, or reduce sample count to 30.
-set_bench/kvs           time:   [165.13 ms 166.16 ms 168.00 ms]                          
-                        change: [-1.8775% -0.4695% +1.0330%] (p = 0.60 > 0.05)
-                        No change in performance detected.
+write_bench/kvs         time:   [6.3083 ms 6.3217 ms 6.3381 ms]                             
+                        change: [+2.7042% +3.1647% +3.6169%] (p = 0.00 < 0.05)
+                        Performance has regressed.
 Found 2 outliers among 100 measurements (2.00%)
   1 (1.00%) high mild
   1 (1.00%) high severe
-Benchmarking set_bench/sled: Warming up for 3.0000 s
-Warning: Unable to complete 100 samples in 5.0s. You may wish to increase target time to 8.2s, or reduce sample count to 60.
-Benchmarking set_bench/sled: Collecting 100 samples in estimated 8.2329 s (100 iterations                                                                                         set_bench/sled          time:   [68.775 ms 70.337 ms 71.838 ms]
-                        change: [-4.3437% -0.9316% +2.4584%] (p = 0.59 > 0.05)
+write_bench/sled        time:   [121.65 ms 123.31 ms 124.95 ms]                             
+                        change: [-3.5028% -0.6705% +2.0784%] (p = 0.65 > 0.05)
                         No change in performance detected.
-Found 25 outliers among 100 measurements (25.00%)
-  24 (24.00%) low severe
-  1 (1.00%) high severe
 
-Benchmarking get_bench/kvs_8: Collecting 100 samples in estimated 5.0865 s (232k iteratio                                                                                         get_bench/kvs_8         time:   [21.895 us 21.905 us 21.915 us]
-                        change: [-0.8553% -0.3150% -0.0114%] (p = 0.20 > 0.05)
-                        No change in performance detected.
-Found 5 outliers among 100 measurements (5.00%)
-  4 (4.00%) high mild
-  1 (1.00%) high severe
-Benchmarking get_bench/kvs_12: Collecting 100 samples in estimated 5.0636 s (227k iterati                                                                                         get_bench/kvs_12        time:   [22.330 us 22.376 us 22.460 us]
-                        change: [+0.3316% +0.6385% +1.0232%] (p = 0.00 < 0.05)
-                        Change within noise threshold.
-Found 5 outliers among 100 measurements (5.00%)
-  3 (3.00%) high mild
-  2 (2.00%) high severe
-Benchmarking get_bench/sled_8: Collecting 100 samples in estimated 5.0022 s (11M iteratio                                                                                         get_bench/sled_8        time:   [601.89 ns 628.54 ns 663.24 ns]
-Found 13 outliers among 100 measurements (13.00%)
-  5 (5.00%) high mild
-  8 (8.00%) high severe
-Benchmarking get_bench/sled_12: Collecting 100 samples in estimated 5.0029 s (3.5M iterat                                                                                         get_bench/sled_12       time:   [3.3871 us 3.5791 us 3.8295 us]
-Found 12 outliers among 100 measurements (12.00%)
-  6 (6.00%) high mild
-  6 (6.00%) high severe
+Benchmarking read_bench/kvs: Warming up for 3.0000 s
+Warning: Unable to complete 20 samples in 5.0s. You may wish to increase target time to 115.5s, or reduce sample count to 10.
+read_bench/kvs          time:   [5.7815 s 5.7870 s 5.7939 s]                            
+Found 2 outliers among 20 measurements (10.00%)
+  1 (5.00%) high mild
+  1 (5.00%) high severe
+read_bench/sled         time:   [9.0981 ms 10.059 ms 11.315 ms]                           
+Found 3 outliers among 20 measurements (15.00%)
+  1 (5.00%) high mild
+  2 (10.00%) high severe

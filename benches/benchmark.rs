@@ -1,77 +1,97 @@
+use std::collections::HashMap;
+use std::path::PathBuf;
+
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use kvs::{KvStore, KvsEngine, SledKvsEngine};
 use rand::prelude::*;
 use rand::{rngs::SmallRng, SeedableRng};
 use tempfile::TempDir;
 
-fn set_bench(c: &mut Criterion) {
-    let mut group = c.benchmark_group("set_bench");
-    group.bench_function("kvs", |b| {
-        b.iter_batched(
-            || {
-                let temp_dir = TempDir::new().unwrap();
-                (KvStore::open(temp_dir.path()).unwrap(), temp_dir)
-            },
-            |(mut store, _temp_dir)| {
-                for i in 1..(1 << 12) {
-                    store.set(format!("key{}", i), "value".to_string()).unwrap();
-                }
-            },
-            BatchSize::SmallInput,
-        )
-    });
-    group.bench_function("sled", |b| {
-        b.iter_batched(
-            || {
-                let temp_dir = TempDir::new().unwrap();
-                (SledKvsEngine::open(temp_dir.path()).unwrap(), temp_dir)
-            },
-            |(mut db, _temp_dir)| {
-                for i in 1..(1 << 12) {
-                    db.set(format!("key{}", i), "value".to_string()).unwrap();
-                }
-            },
-            BatchSize::SmallInput,
-        )
-    });
-    group.finish();
+fn get_random_ascii_string_by_rng(rng: &mut SmallRng, size: usize) -> String {
+    (0..size)
+        .map(|_| {
+            const CHARSET: &[u8] =
+                b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890";
+            const LEN: usize = CHARSET.len();
+            let idx = rng.gen_range(0..LEN);
+            CHARSET[idx] as char
+        })
+        .collect::<String>()
 }
 
-fn get_bench(c: &mut Criterion) {
-    let mut group = c.benchmark_group("get_bench");
-    for i in &vec![8, 12] {
-        group.bench_with_input(format!("kvs_{}", i), i, |b, i| {
-            let temp_dir = TempDir::new().unwrap();
-            let mut store = KvStore::open(temp_dir.path()).unwrap();
-            for key_i in 1..(1 << i) {
-                store
-                    .set(format!("key{}", key_i), "value".to_string())
-                    .unwrap();
-            }
-            let mut rng = SmallRng::from_seed([0; 32]);
-            b.iter(|| {
-                let num: u32 = rng.gen_range(1..1 << i);
-                store.get(format!("key{}", num)).unwrap();
-            })
-        });
+fn get_engine_by_name(name: &str, path: impl Into<PathBuf>) -> Box<dyn KvsEngine> {
+    match name {
+        "kvs" => Box::new(KvStore::open(path).unwrap()),
+        "sled" => Box::new(SledKvsEngine::open(path).unwrap()),
+        _ => panic!("Unknown engine name"),
     }
-    for i in &vec![8, 12] {
-        group.bench_with_input(format!("sled_{}", i), i, |b, i| {
-            let temp_dir = TempDir::new().unwrap();
-            let mut db = SledKvsEngine::open(temp_dir.path()).unwrap();
-            for key_i in 1..(1 << i) {
-                db.set(format!("key{}", key_i), "value".to_string())
-                    .unwrap();
-            }
-            let mut rng = SmallRng::from_seed([0; 32]);
-            b.iter(|| {
-                let num: u32 = rng.gen_range(1..1 << i);
-                db.get(format!("key{}", num)).unwrap();
-            })
+}
+
+// With the kvs/sled engine, write 100 values with random keys of length 1-100000 bytes and random values of length 1-100000 bytes.
+fn write_bench(c: &mut Criterion) {
+    let mut group = c.benchmark_group("write_bench");
+    group
+        .sample_size(100)
+        .measurement_time(std::time::Duration::from_secs(20));
+    for engine_name in vec!["kvs", "sled"] {
+        let mut rng = SmallRng::seed_from_u64(0);
+        group.bench_with_input(engine_name, engine_name, |b, engine_name| {
+            b.iter_batched(
+                || {
+                    let temp_dir = TempDir::new().unwrap();
+                    let mut kv_pair = Vec::new();
+                    for _ in 0..100 {
+                        let k = get_random_ascii_string_by_rng(&mut rng, 10000);
+                        let v = get_random_ascii_string_by_rng(&mut rng, 10000);
+                        kv_pair.push((k, v));
+                    }
+                    (
+                        get_engine_by_name(engine_name, temp_dir.path()),
+                        temp_dir,
+                        kv_pair,
+                    )
+                },
+                |(mut engine, _temp_dir, kv_pair)| {
+                    for (key, value) in kv_pair {
+                        engine.set(key, value).unwrap();
+                    }
+                },
+                BatchSize::SmallInput,
+            )
         });
     }
     group.finish();
 }
 
-criterion_group!(benches, set_bench, get_bench);
+// With the kvs/sled engine, read 1000 values from previously written keys, with keys and values of random length.
+fn read_bench(c: &mut Criterion) {
+    let mut group = c.benchmark_group("read_bench");
+    group.sample_size(20);
+    for engine_name in vec!["kvs", "sled"] {
+        let mut rng = SmallRng::seed_from_u64(0);
+        group.bench_with_input(engine_name, engine_name, |b, engine_name| {
+            let temp_dir = TempDir::new().unwrap();
+            let mut engine = get_engine_by_name(engine_name, temp_dir.path());
+            let mut kv_pair = HashMap::new();
+            for _ in 0..1000 {
+                let k = get_random_ascii_string_by_rng(&mut rng, 10000);
+                let v = get_random_ascii_string_by_rng(&mut rng, 10000);
+                kv_pair.insert(k, v);
+            }
+            for (key, value) in kv_pair.iter() {
+                engine.set(key.clone(), value.clone()).unwrap();
+            }
+            drop(engine);
+            let engine_new = get_engine_by_name(engine_name, temp_dir.path());
+            b.iter(move || {
+                for (key, value) in &kv_pair {
+                    assert_eq!(engine_new.get(key.to_string()).unwrap().unwrap(), *value);
+                }
+            })
+        });
+    }
+    group.finish();
+}
+
+criterion_group!(benches, write_bench, read_bench);
 criterion_main!(benches);
