@@ -57,6 +57,8 @@ impl KvsEngine for KvStore {
         match index {
             Some(index) => {
                 let file = self.file_handles.get(&index.file_id).unwrap();
+                // maybe because Seek trait have implemented for &File so this can work
+                #[allow(clippy::clone_double_ref)]
                 file.clone()
                     .seek(std::io::SeekFrom::Start(index.value_pos))?;
                 // with out take serde_json don't know how long to read
