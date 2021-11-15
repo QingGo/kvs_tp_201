@@ -14,6 +14,7 @@ pub struct SledKvsEngine {
 impl KvsEngine for SledKvsEngine {
     fn set(&mut self, key: String, value: String) -> Result<()> {
         self.db.insert(key, &*value)?;
+        self.db.flush()?;
         Ok(())
     }
 
@@ -22,7 +23,7 @@ impl KvsEngine for SledKvsEngine {
             .db
             .get(key)?
             .map(|value| String::from_utf8_lossy(&value).to_string());
-        self.db.flush()?;
+        
         Ok(result)
     }
 
