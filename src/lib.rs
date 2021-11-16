@@ -7,6 +7,7 @@ extern crate slog_term;
 extern crate anyhow;
 
 mod kvs;
+mod thread_pool;
 mod redis_protocol;
 pub mod utils;
 

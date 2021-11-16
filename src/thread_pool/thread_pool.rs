@@ -7,7 +7,7 @@ use std::{
     time::Duration,
 };
 
-struct ThreadPool {
+pub struct ThreadPool {
     workers: Vec<JoinHandle<()>>,
     queue: Arc<Mutex<VecDeque<Box<dyn FnOnce() + Send + 'static>>>>,
     is_finish: Arc<Mutex<bool>>,
@@ -65,12 +65,13 @@ impl ThreadPool {
     }
 }
 
-fn main() {
+#[test]
+fn test() {
     let pool = ThreadPool::new(4).unwrap();
     for i in 0..10 {
         pool.spawn(move || {
             println!("Hello from thread {}!", i);
-            sleep(Duration::from_millis(1000));
+            sleep(Duration::from_millis(2000));
         });
     }
     pool.join().unwrap();
