@@ -3,33 +3,24 @@ use super::sled_engine::SledKvsEngine;
 use slog::Logger;
 use std::io::prelude::*;
 use std::net::TcpListener;
+use std::sync::{Arc, Mutex};
 
 use super::engine::KvsEngine;
 use super::store::KvStore;
 
 use super::protocol::{Command, Response};
 
-pub struct KvsServer {
+pub struct KvsServer<E: KvsEngine> {
     logger: Logger,
     listener: TcpListener,
-    engine: Box<dyn KvsEngine>,
+    engine: E,
 }
 
-impl KvsServer {
-    pub fn new(
-        ip_port: (std::net::IpAddr, u16),
-        engine_name: &str,
-        logger: Logger,
-    ) -> Result<Self> {
+impl<E: KvsEngine> KvsServer<E> {
+    pub fn new(ip_port: (std::net::IpAddr, u16), engine: E, logger: Logger) -> Result<Self> {
         // let (ip, port) = ip_port;
         let listener = TcpListener::bind(ip_port)?;
         info!(logger, "Listening on"; "addr" => format!("{:?}", ip_port));
-        let engine: Box<dyn KvsEngine>;
-        match engine_name {
-            "kvs" => engine = Box::new(KvStore::new()?),
-            "sled" => engine = Box::new(SledKvsEngine::new()?),
-            _ => panic!("Unknown engine name"),
-        }
         Ok(KvsServer {
             logger,
             listener,

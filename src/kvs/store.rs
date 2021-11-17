@@ -10,7 +10,9 @@ use std::fs;
 use std::fs::File;
 use std::io;
 use std::io::prelude::*;
+use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
+// use std::sync::Arc;
 use std::time;
 
 use super::error::KvsError;
@@ -26,20 +28,52 @@ use super::error::KvsError;
 /// #   Ok(())
 /// # }
 /// ```
-
+#[derive(Clone)]
 pub struct KvStore {
     active_file_id: u64,
     dir: PathBuf,
-    file_handles: BTreeMap<u64, File>,
+    file_handles: BTreeMap<u64, FileWrapper>,
     indexes: HashMap<String, Index>,
     uncompacted_size: u64,
+}
+
+struct FileWrapper {
+    file: File,
+}
+
+impl Deref for FileWrapper {
+    type Target = File;
+
+    fn deref(&self) -> &Self::Target {
+        &self.file
+    }
+}
+
+impl DerefMut for FileWrapper {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.file
+    }
+}
+
+impl Clone for FileWrapper {
+    fn clone(&self) -> FileWrapper {
+        FileWrapper {
+            file: self.file.try_clone().unwrap(),
+        }
+    }
+}
+
+impl Read for FileWrapper {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.file.read(buf)
+    }
 }
 
 use super::engine::KvsEngine;
 
 impl KvsEngine for KvStore {
     /// Set the value of a string key to a string. Return an error if the value is not written successfully.
-    fn set(&mut self, key: String, value: String) -> Result<()> {
+    fn set(&self, key: String, value: String) -> Result<()> {
         let record = Record {
             command: Command::Set,
             tstamp: time::SystemTime::now()
@@ -48,7 +82,7 @@ impl KvsEngine for KvStore {
             key,
             value,
         };
-        self.insert_record(record)?;
+        self.clone().insert_record(record)?;
         Ok(())
     }
     /// Get the string value of a string key. If the key does not exist, return None. Return an error if the value is not read successfully.
@@ -59,10 +93,10 @@ impl KvsEngine for KvStore {
                 let file = self.file_handles.get(&index.file_id).unwrap();
                 // maybe because Seek trait have implemented for &File so this can work
                 #[allow(clippy::clone_double_ref)]
-                file.clone()
+                file.deref().clone()
                     .seek(std::io::SeekFrom::Start(index.value_pos))?;
                 // with out take serde_json don't know how long to read
-                let cmd_reader = file.take(index.value_sz as u64);
+                let cmd_reader = file.deref().take(index.value_sz as u64);
                 let record: Record = serde_json::from_reader(cmd_reader)?;
                 Ok(Some(record.value))
             }
@@ -70,7 +104,7 @@ impl KvsEngine for KvStore {
         }
     }
     /// Remove a given key. Return an error if the key does not exist or is not removed successfully.
-    fn remove(&mut self, key: String) -> Result<()> {
+    fn remove(&self, key: String) -> Result<()> {
         let record = Record {
             command: Command::Remove,
             tstamp: time::SystemTime::now()
@@ -79,12 +113,12 @@ impl KvsEngine for KvStore {
             key,
             value: "".to_string(),
         };
-        self.insert_record(record)?;
+        self.clone().insert_record(record)?;
         Ok(())
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Index {
     file_id: u64,
     value_sz: u64,
@@ -196,7 +230,7 @@ impl KvStore {
             file.seek(std::io::SeekFrom::Start(index.value_pos))?;
             // tricky, use io::copy to copy the record
             let mut entry_reader = file.take(index.value_sz);
-            io::copy(&mut entry_reader, &mut compact_file)?;
+            io::copy(&mut entry_reader, &mut compact_file.deref())?;
             // update index
             index.file_id = self.active_file_id + 1;
             index.value_pos = pos;
@@ -233,7 +267,7 @@ fn get_db_files_ids(dir: &Path) -> Result<Vec<u64>> {
     Ok(files_ids)
 }
 
-fn get_file_handles(dir: &Path, file_ids: &[u64]) -> Result<BTreeMap<u64, File>> {
+fn get_file_handles(dir: &Path, file_ids: &[u64]) -> Result<BTreeMap<u64, FileWrapper>> {
     let mut handles = BTreeMap::new();
     for file_id in file_ids {
         handles.insert(*file_id, generate_new_file(dir, *file_id)?);
@@ -241,14 +275,17 @@ fn get_file_handles(dir: &Path, file_ids: &[u64]) -> Result<BTreeMap<u64, File>>
     Ok(handles)
 }
 
-fn build_indexes(file_handles: &mut BTreeMap<u64, File>) -> Result<(HashMap<String, Index>, u64)> {
+fn build_indexes(
+    file_handles: &mut BTreeMap<u64, FileWrapper>,
+) -> Result<(HashMap<String, Index>, u64)> {
     let mut indexes = HashMap::new();
     let mut uncompacted_size: u64 = 0;
     // loop all file in order instead of using timestamp to choose new record to build index
     for (file_id, file) in file_handles.iter() {
         let mut pos = 0;
         // maybe use buffer will be better,
-        let mut records_stream = serde_json::Deserializer::from_reader(file).into_iter::<Record>();
+        let mut records_stream =
+            serde_json::Deserializer::from_reader(file.deref()).into_iter::<Record>();
         // tricky, if use for record in records_stream,
         // records_stream.byte_offset() will not work because records_stream has been moved
         while let Some(record) = records_stream.next() {
@@ -281,12 +318,12 @@ fn build_indexes(file_handles: &mut BTreeMap<u64, File>) -> Result<(HashMap<Stri
     Ok((indexes, uncompacted_size))
 }
 
-fn generate_new_file(path: &Path, file_id: u64) -> Result<File> {
+fn generate_new_file(path: &Path, file_id: u64) -> Result<FileWrapper> {
     let file_path = path.join(format!("{}.db", file_id));
     let file_handle = fs::OpenOptions::new()
         .write(true)
         .create(true)
         .read(true)
         .open(&file_path)?;
-    Ok(file_handle)
+    Ok(FileWrapper { file: file_handle })
 }

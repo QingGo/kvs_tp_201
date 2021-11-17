@@ -7,12 +7,13 @@ use crate::KvsError;
 
 use super::engine::KvsEngine;
 use super::error::Result;
+#[derive(Clone)]
 pub struct SledKvsEngine {
     db: sled::Db,
 }
 
 impl KvsEngine for SledKvsEngine {
-    fn set(&mut self, key: String, value: String) -> Result<()> {
+    fn set(&self, key: String, value: String) -> Result<()> {
         self.db.insert(key, &*value)?;
         self.db.flush()?;
         Ok(())
@@ -27,7 +28,7 @@ impl KvsEngine for SledKvsEngine {
         Ok(result)
     }
 
-    fn remove(&mut self, key: String) -> Result<()> {
+    fn remove(&self, key: String) -> Result<()> {
         self.db.remove(&key)?.ok_or(KvsError::KeyNotFound {
             key,
             backtrace: Backtrace::force_capture(),

@@ -1,8 +1,11 @@
 use std::collections::HashMap;
+use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
-use kvs::{KvStore, KvsEngine, SledKvsEngine};
+use kvs::{KvStore, KvsEngine, KvsError, SledKvsEngine};
+use kvs::Result;
+use lazy_static::__Deref;
 use rand::prelude::*;
 use rand::{rngs::SmallRng, SeedableRng};
 use tempfile::TempDir;
@@ -27,10 +30,31 @@ fn get_random_ascii_string_by_rng(rng: &mut SmallRng, size: usize) -> String {
         .collect::<String>()
 }
 
-fn get_engine_by_name(name: &str, path: impl Into<PathBuf>) -> Box<dyn KvsEngine> {
+enum EngineEnum {
+    KvStore(KvStore),
+    SledKvsEngine(SledKvsEngine),
+}
+
+impl EngineEnum {
+    fn set(&mut self, key: String, value: String) -> Result<()> {
+        match self {
+            EngineEnum::KvStore(engine) => engine.set(key, value),
+            EngineEnum::SledKvsEngine(engine) => engine.set(key, value),
+        }
+    }
+
+    fn get(&mut self, key: String) -> Result<Option<String>> {
+        match self {
+            EngineEnum::KvStore(engine) => engine.get(key),
+            EngineEnum::SledKvsEngine(engine) => engine.get(key),
+        }
+    }
+}
+
+fn get_engine_by_name(name: &str, path: impl Into<PathBuf>) -> EngineEnum {
     match name {
-        "kvs" => Box::new(KvStore::open(path).unwrap()),
-        "sled" => Box::new(SledKvsEngine::open(path).unwrap()),
+        "kvs" => EngineEnum::KvStore(KvStore::open(path).unwrap()),
+        "sled" => EngineEnum::SledKvsEngine(SledKvsEngine::open(path).unwrap()),
         _ => panic!("Unknown engine name"),
     }
 }
@@ -90,7 +114,7 @@ fn read_bench(c: &mut Criterion) {
                 engine.set(key.clone(), value.clone()).unwrap();
             }
             drop(engine);
-            let engine_new = get_engine_by_name(engine_name, temp_dir.path());
+            let mut engine_new = get_engine_by_name(engine_name, temp_dir.path());
             b.iter(move || {
                 for (key, value) in &kv_pair {
                     assert_eq!(engine_new.get(key.to_string()).unwrap().unwrap(), *value);
