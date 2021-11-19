@@ -1,11 +1,9 @@
 use std::collections::HashMap;
-use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
-use kvs::{KvStore, KvsEngine, KvsError, SledKvsEngine};
+use kvs::{KvStore, KvsEngine, SledKvsEngine};
 use kvs::Result;
-use lazy_static::__Deref;
 use rand::prelude::*;
 use rand::{rngs::SmallRng, SeedableRng};
 use tempfile::TempDir;

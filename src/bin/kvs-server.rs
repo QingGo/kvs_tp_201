@@ -8,7 +8,6 @@ extern crate anyhow;
 use clap::Parser;
 use kvs::utils::*;
 use kvs::KvStore;
-use kvs::KvsEngine;
 use kvs::KvsServer;
 use kvs::Result;
 use kvs::SledKvsEngine;

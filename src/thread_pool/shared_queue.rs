@@ -1,24 +1,30 @@
 use anyhow::Result;
 use std::collections::VecDeque;
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
     sync::Arc,
     thread::{self, sleep, JoinHandle},
     time::Duration,
 };
 
-pub struct ThreadPool {
+use super::ThreadPool;
+
+type ShardQueue = Arc<Mutex<VecDeque<Box<dyn FnOnce() + Send + 'static>>>>;
+
+#[allow(unused)]
+pub struct SharedQueueThreadPool {
     workers: Vec<JoinHandle<()>>,
-    queue: Arc<Mutex<VecDeque<Box<dyn FnOnce() + Send + 'static>>>>,
-    is_finish: Arc<Mutex<bool>>,
+    queue: ShardQueue,
+    is_finish: Arc<AtomicBool>,
 }
 
-impl ThreadPool {
+impl ThreadPool for SharedQueueThreadPool {
     fn new(threads: u32) -> Result<Self> {
-        let queue: Arc<Mutex<VecDeque<Box<dyn FnOnce() + Send + 'static>>>> =
+        let queue: ShardQueue =
             Arc::new(Mutex::new(VecDeque::new()));
         let mut workers = Vec::with_capacity(threads as usize);
-        let is_finish = Arc::new(Mutex::new(false));
+        let is_finish = Arc::new(AtomicBool::new(false));
         for _ in 0..threads {
             let queue_clone = Arc::clone(&queue);
             let is_finish_clone = Arc::clone(&is_finish);
@@ -28,7 +34,7 @@ impl ThreadPool {
                 if let Some(task) = task_option {
                     task();
                 } else {
-                    if *is_finish_clone.lock().unwrap() {
+                    if is_finish_clone.load(Ordering::SeqCst) {
                         break;
                     }
                     sleep(Duration::from_millis(100));
@@ -49,17 +55,20 @@ impl ThreadPool {
     {
         self.queue.lock().unwrap().push_back(Box::new(job));
     }
+}
 
-    fn join(self) -> thread::Result<()> {
+impl SharedQueueThreadPool{
+    #[allow(unused)]
+    fn join(self) -> Result<()> {
         loop {
             if self.queue.lock().unwrap().len() == 0 {
-                *self.is_finish.lock().unwrap() = true;
+                self.is_finish.store(true, Ordering::SeqCst);
                 break;
             }
             sleep(Duration::from_millis(100));
         }
         for worker in self.workers {
-            worker.join()?;
+            worker.join().unwrap();
         }
         Ok(())
     }
@@ -67,7 +76,7 @@ impl ThreadPool {
 
 #[test]
 fn test() {
-    let pool = ThreadPool::new(4).unwrap();
+    let pool = SharedQueueThreadPool::new(4).unwrap();
     for i in 0..10 {
         pool.spawn(move || {
             println!("Hello from thread {}!", i);

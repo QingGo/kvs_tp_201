@@ -1,12 +1,9 @@
 use super::error::Result;
-use super::sled_engine::SledKvsEngine;
 use slog::Logger;
 use std::io::prelude::*;
 use std::net::TcpListener;
-use std::sync::{Arc, Mutex};
 
 use super::engine::KvsEngine;
-use super::store::KvStore;
 
 use super::protocol::{Command, Response};
 

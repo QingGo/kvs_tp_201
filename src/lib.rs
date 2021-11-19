@@ -7,8 +7,8 @@ extern crate slog_term;
 extern crate anyhow;
 
 mod kvs;
-mod thread_pool;
 mod redis_protocol;
+pub mod thread_pool;
 pub mod utils;
 
 pub use kvs::client::*;
@@ -19,3 +19,5 @@ pub use kvs::server::*;
 pub use kvs::sled_engine::*;
 pub use kvs::store::*;
 pub use redis_protocol::*;
+
+
