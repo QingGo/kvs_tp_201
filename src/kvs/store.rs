@@ -10,8 +10,9 @@ use std::fs;
 use std::fs::File;
 use std::io;
 use std::io::prelude::*;
-use std::ops::{Deref, DerefMut};
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 // use std::sync::Arc;
 use std::time;
 
@@ -30,43 +31,15 @@ use super::error::KvsError;
 /// ```
 #[derive(Clone)]
 pub struct KvStore {
+    db: Arc<Mutex<KvDB>>,
+}
+
+struct KvDB {
     active_file_id: u64,
     dir: PathBuf,
-    file_handles: BTreeMap<u64, FileWrapper>,
+    file_handles: BTreeMap<u64, File>,
     indexes: HashMap<String, Index>,
     uncompacted_size: u64,
-}
-
-struct FileWrapper {
-    file: File,
-}
-
-impl Deref for FileWrapper {
-    type Target = File;
-
-    fn deref(&self) -> &Self::Target {
-        &self.file
-    }
-}
-
-impl DerefMut for FileWrapper {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.file
-    }
-}
-
-impl Clone for FileWrapper {
-    fn clone(&self) -> FileWrapper {
-        FileWrapper {
-            file: self.file.try_clone().unwrap(),
-        }
-    }
-}
-
-impl Read for FileWrapper {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.file.read(buf)
-    }
 }
 
 use super::engine::KvsEngine;
@@ -87,13 +60,15 @@ impl KvsEngine for KvStore {
     }
     /// Get the string value of a string key. If the key does not exist, return None. Return an error if the value is not read successfully.
     fn get(&self, key: String) -> Result<Option<String>> {
-        let index = self.indexes.get(&key);
+        let db = self.db.lock().unwrap();
+        let index = db.indexes.get(&key);
         match index {
             Some(index) => {
-                let file = self.file_handles.get(&index.file_id).unwrap();
+                let file = db.file_handles.get(&index.file_id).unwrap();
                 // maybe because Seek trait have implemented for &File so this can work
                 #[allow(clippy::clone_double_ref)]
-                file.deref().clone()
+                file.deref()
+                    .clone()
                     .seek(std::io::SeekFrom::Start(index.value_pos))?;
                 // with out take serde_json don't know how long to read
                 let cmd_reader = file.deref().take(index.value_sz as u64);
@@ -170,36 +145,41 @@ impl KvStore {
         } else {
             active_file_id = *db_file_ids.last().unwrap();
         }
-        Ok(KvStore {
+        let kv_db = KvDB {
             active_file_id,
             dir,
             file_handles,
             indexes,
             uncompacted_size,
+        };
+        Ok(KvStore {
+            db: Arc::new(Mutex::new(kv_db)),
         })
     }
 
     fn insert_record(&mut self, record: Record) -> Result<()> {
-        let mut active_file = self.get_last_file()?;
+        let mut db = self.db.lock().unwrap();
+        let mut active_file = get_last_file(&db.file_handles, db.active_file_id)?;
         let old_pos = active_file.seek(std::io::SeekFrom::End(0))?;
         serde_json::to_writer(active_file, &record)?;
         let new_pos = active_file.seek(std::io::SeekFrom::End(0))?;
+        let active_file_id = db.active_file_id;
         match record.command {
             Command::Set => {
-                if let Some(old_index) = self.indexes.insert(
+                if let Some(old_index) = db.indexes.insert(
                     record.key,
                     Index {
-                        file_id: self.active_file_id,
+                        file_id: active_file_id,
                         value_sz: new_pos - old_pos,
                         value_pos: old_pos,
                     },
                 ) {
-                    self.uncompacted_size += old_index.value_sz;
+                    db.uncompacted_size += old_index.value_sz;
                 }
             }
             Command::Remove => {
-                if let Some(old_index) = self.indexes.remove(&record.key) {
-                    self.uncompacted_size += old_index.value_sz;
+                if let Some(old_index) = db.indexes.remove(&record.key) {
+                    db.uncompacted_size += old_index.value_sz;
                 } else {
                     return Err(KvsError::KeyNotFound {
                         key: record.key,
@@ -210,44 +190,48 @@ impl KvStore {
             _ => {}
         }
 
-        if self.uncompacted_size > TRIGGER_COMPACT_SIZE {
+        if db.uncompacted_size > TRIGGER_COMPACT_SIZE {
             self.compact()?;
         }
         Ok(())
     }
 
-    fn get_last_file(&self) -> Result<&File> {
-        Ok(self.file_handles.get(&self.active_file_id).unwrap())
-    }
-
-    fn compact(&mut self) -> Result<()> {
-        let mut compact_file = generate_new_file(&self.dir, self.active_file_id + 1)?;
+    fn compact(&self) -> Result<()> {
+        let mut db = self.db.lock().unwrap();
+        let mut compact_file = generate_new_file(&db.dir, db.active_file_id + 1)?;
         // compact all include current active file
         // use index to find the record
+        let mut active_file_id = db.active_file_id;
+        // when need to change two or more fields in the same time(such as loop), replace/take/swap or RefCell
+        let mut file_handles = std::mem::take(&mut db.file_handles);
+        let indexes = db.indexes.iter_mut();
         let mut pos = 0;
-        for (_, index) in self.indexes.iter_mut() {
-            let file = self.file_handles.get_mut(&index.file_id).unwrap();
+        for (_, index) in indexes {
+            let file = file_handles.get_mut(&index.file_id).unwrap();
             file.seek(std::io::SeekFrom::Start(index.value_pos))?;
             // tricky, use io::copy to copy the record
             let mut entry_reader = file.take(index.value_sz);
-            io::copy(&mut entry_reader, &mut compact_file.deref())?;
+            io::copy(&mut entry_reader, &mut compact_file)?;
             // update index
-            index.file_id = self.active_file_id + 1;
+            index.file_id = active_file_id + 1;
             index.value_pos = pos;
             pos = compact_file.seek(std::io::SeekFrom::End(0))?;
         }
+        std::mem::swap(&mut db.file_handles, &mut file_handles);
         // remove old file, can not remove during loop
-        let file_ids: Vec<u64> = self.file_handles.keys().cloned().collect();
+        let file_ids: Vec<u64> = db.file_handles.keys().cloned().collect();
         for file_id in file_ids {
-            self.file_handles.remove(&file_id);
-            fs::remove_file(self.dir.join(format!("{}.db", file_id)))?;
+            db.file_handles.remove(&file_id);
+            fs::remove_file(db.dir.join(format!("{}.db", file_id)))?;
         }
         // update file handle and active file id, should be lock if compact by another thread?
-        self.active_file_id += 1;
-        self.file_handles.insert(self.active_file_id, compact_file);
-        self.active_file_id += 1;
-        let active_file = generate_new_file(&self.dir, self.active_file_id)?;
-        self.file_handles.insert(self.active_file_id, active_file);
+        active_file_id += 1;
+        db.file_handles.insert(active_file_id, compact_file);
+        active_file_id += 1;
+        let active_file = generate_new_file(&db.dir, db.active_file_id)?;
+        db.file_handles.insert(active_file_id, active_file);
+        db.active_file_id = active_file_id;
+        
         Ok(())
     }
 }
@@ -267,7 +251,7 @@ fn get_db_files_ids(dir: &Path) -> Result<Vec<u64>> {
     Ok(files_ids)
 }
 
-fn get_file_handles(dir: &Path, file_ids: &[u64]) -> Result<BTreeMap<u64, FileWrapper>> {
+fn get_file_handles(dir: &Path, file_ids: &[u64]) -> Result<BTreeMap<u64, File>> {
     let mut handles = BTreeMap::new();
     for file_id in file_ids {
         handles.insert(*file_id, generate_new_file(dir, *file_id)?);
@@ -275,9 +259,7 @@ fn get_file_handles(dir: &Path, file_ids: &[u64]) -> Result<BTreeMap<u64, FileWr
     Ok(handles)
 }
 
-fn build_indexes(
-    file_handles: &mut BTreeMap<u64, FileWrapper>,
-) -> Result<(HashMap<String, Index>, u64)> {
+fn build_indexes(file_handles: &mut BTreeMap<u64, File>) -> Result<(HashMap<String, Index>, u64)> {
     let mut indexes = HashMap::new();
     let mut uncompacted_size: u64 = 0;
     // loop all file in order instead of using timestamp to choose new record to build index
@@ -318,12 +300,16 @@ fn build_indexes(
     Ok((indexes, uncompacted_size))
 }
 
-fn generate_new_file(path: &Path, file_id: u64) -> Result<FileWrapper> {
+fn generate_new_file(path: &Path, file_id: u64) -> Result<File> {
     let file_path = path.join(format!("{}.db", file_id));
     let file_handle = fs::OpenOptions::new()
         .write(true)
         .create(true)
         .read(true)
         .open(&file_path)?;
-    Ok(FileWrapper { file: file_handle })
+    Ok(file_handle)
+}
+
+fn get_last_file(file_handles: &BTreeMap<u64, File>, active_file_id: u64) -> Result<&File> {
+    Ok(file_handles.get(&active_file_id).unwrap())
 }
