@@ -26,6 +26,9 @@ struct Config {
 
 fn main() -> Result<()> {
     let root_logger: slog::Logger = get_root_logger("kvs-server".to_string());
+    // or slog_stdlog will not work
+    let _scope_guard = slog_scope::set_global_logger(root_logger.clone());
+    slog_stdlog::init().unwrap();
     info!(root_logger, "Starting kvs-server"; "version" => env!("CARGO_PKG_VERSION"));
     let config = Config::parse();
     info!(root_logger, "Parse config successfully"; "config" => format!("{:?}", config));
@@ -34,11 +37,11 @@ fn main() -> Result<()> {
     let ip_port = parse_ip_port(&config.addr)?;
 
     let log = root_logger.new(o!("engine" => "kvs"));
+    log::info!("engine_name: {}", engine_name);
     match engine_name.as_str() {
         "kvs" => KvsServer::new(ip_port, KvStore::new()?, log)?.run()?,
         "sled" => KvsServer::new(ip_port, SledKvsEngine::new()?, log)?.run()?,
         _ => panic!("Unknown engine name"),
     };
-
     Ok(())
 }

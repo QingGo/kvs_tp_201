@@ -34,7 +34,7 @@ pub fn get_engine(last_engine: Option<String>, config_engine: Option<String>) ->
     if let Some(last_engine) = last_engine {
         if let Some(config_engine) = config_engine {
             if config_engine != last_engine {
-                return Err(anyhow!("engine not match"));
+                return Err(anyhow!("engine not match lase used"));
             } else {
                 engine = config_engine;
             }

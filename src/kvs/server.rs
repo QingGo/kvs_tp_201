@@ -15,12 +15,12 @@ pub struct KvsServer<E: KvsEngine, T: ThreadPool> {
     pool: T,
 }
 
-impl<E: KvsEngine> KvsServer<E, NaiveThreadPool> {
+impl<E: KvsEngine> KvsServer<E, SharedQueueThreadPool> {
     pub fn new(ip_port: (std::net::IpAddr, u16), engine: E, logger: Logger) -> Result<Self> {
         // let (ip, port) = ip_port;
         let listener = TcpListener::bind(ip_port)?;
         info!(logger, "Listening on"; "addr" => format!("{:?}", ip_port));
-        let pool = NaiveThreadPool::new(4)?;
+        let pool = SharedQueueThreadPool::new(num_cpus::get() as u32)?;
         Ok(KvsServer {
             logger,
             listener,

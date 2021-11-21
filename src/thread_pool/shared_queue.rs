@@ -34,6 +34,7 @@ impl Drop for TaskReceiver {
 
 impl ThreadPool for SharedQueueThreadPool {
     fn new(threads: u32) -> Result<Self> {
+        log::info!("create shared queue thread pool with {} threads", threads);
         let (sender, receiver) = bounded::<ThreadPoolMessage>(100);
         for _ in 0..threads {
             let task_receiver = TaskReceiver {
