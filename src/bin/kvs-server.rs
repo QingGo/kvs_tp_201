@@ -6,6 +6,7 @@ extern crate slog_term;
 extern crate anyhow;
 
 use clap::Parser;
+use kvs::thread_pool::SharedQueueThreadPool;
 use kvs::utils::*;
 use kvs::KvStore;
 use kvs::KvsServer;
@@ -39,8 +40,11 @@ fn main() -> Result<()> {
     let log = root_logger.new(o!("engine" => "kvs"));
     log::info!("engine_name: {}", engine_name);
     match engine_name.as_str() {
-        "kvs" => KvsServer::new(ip_port, KvStore::new()?, log)?.run()?,
-        "sled" => KvsServer::new(ip_port, SledKvsEngine::new()?, log)?.run()?,
+        "kvs" => {
+            KvsServer::<_, SharedQueueThreadPool>::new(ip_port, KvStore::new()?, log)?.run()?
+        }
+        "sled" => KvsServer::<_, SharedQueueThreadPool>::new(ip_port, SledKvsEngine::new()?, log)?
+            .run()?,
         _ => panic!("Unknown engine name"),
     };
     Ok(())
