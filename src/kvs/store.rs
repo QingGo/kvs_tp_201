@@ -191,13 +191,14 @@ impl KvStore {
         }
 
         if db.uncompacted_size > TRIGGER_COMPACT_SIZE {
-            self.compact()?;
+            self.compact(&mut db)?;
         }
         Ok(())
     }
 
-    fn compact(&self) -> Result<()> {
-        let mut db = self.db.lock().unwrap();
+    fn compact(&self, db: &mut KvDB) -> Result<()> {
+        // should not try to get lock here cause function insert_record has get the lock and it will be block forever
+        // let mut db = self.db.lock().unwrap();
         let mut compact_file = generate_new_file(&db.dir, db.active_file_id + 1)?;
         // compact all include current active file
         // use index to find the record
@@ -228,7 +229,7 @@ impl KvStore {
         active_file_id += 1;
         db.file_handles.insert(active_file_id, compact_file);
         active_file_id += 1;
-        let active_file = generate_new_file(&db.dir, db.active_file_id)?;
+        let active_file = generate_new_file(&db.dir, active_file_id)?;
         db.file_handles.insert(active_file_id, active_file);
         db.active_file_id = active_file_id;
         
