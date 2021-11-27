@@ -1,9 +1,15 @@
+#![allow(dead_code)]
+// #![allow(unused_variables)]
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::thread;
 
-use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
+use criterion::measurement::WallTime;
+use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkGroup, Criterion};
+use kvs::thread_pool::{RayonThreadPool, SharedQueueThreadPool, ThreadPool};
+use kvs::utils::*;
+use kvs::{Command, KvsClient, KvsServer, Result};
 use kvs::{KvStore, KvsEngine, SledKvsEngine};
-use kvs::Result;
 use rand::prelude::*;
 use rand::{rngs::SmallRng, SeedableRng};
 use tempfile::TempDir;
@@ -61,8 +67,8 @@ fn get_engine_by_name(name: &str, path: impl Into<PathBuf>) -> EngineEnum {
 fn write_bench(c: &mut Criterion) {
     let mut group = c.benchmark_group("write_bench");
     group
-        .sample_size(100)
-        .measurement_time(std::time::Duration::from_secs(20));
+        .sample_size(10)
+        .measurement_time(std::time::Duration::from_secs(5));
     for engine_name in vec!["kvs", "sled"] {
         let mut rng = SmallRng::seed_from_u64(0);
         group.bench_with_input(engine_name, engine_name, |b, engine_name| {
@@ -71,8 +77,8 @@ fn write_bench(c: &mut Criterion) {
                     let temp_dir = TempDir::new().unwrap();
                     let mut kv_pair = Vec::new();
                     for _ in 0..100 {
-                        let k = get_random_ascii_string_by_rng(&mut rng, 10000);
-                        let v = get_random_ascii_string_by_rng(&mut rng, 10000);
+                        let k = get_random_ascii_string_by_rng(&mut rng, 10);
+                        let v = get_random_ascii_string_by_rng(&mut rng, 10);
                         kv_pair.push((k, v));
                     }
                     (
@@ -96,16 +102,18 @@ fn write_bench(c: &mut Criterion) {
 // With the kvs/sled engine, read 1000 values from previously written keys, with keys and values of random length.
 fn read_bench(c: &mut Criterion) {
     let mut group = c.benchmark_group("read_bench");
-    group.sample_size(20);
+    group
+        .sample_size(10)
+        .measurement_time(std::time::Duration::from_secs(5));
     for engine_name in vec!["kvs", "sled"] {
         let mut rng = SmallRng::seed_from_u64(0);
         group.bench_with_input(engine_name, engine_name, |b, engine_name| {
             let temp_dir = TempDir::new().unwrap();
             let mut engine = get_engine_by_name(engine_name, temp_dir.path());
             let mut kv_pair = HashMap::new();
-            for _ in 0..1000 {
-                let k = get_random_ascii_string_by_rng(&mut rng, 10000);
-                let v = get_random_ascii_string_by_rng(&mut rng, 10000);
+            for _ in 0..100 {
+                let k = get_random_ascii_string_by_rng(&mut rng, 10);
+                let v = get_random_ascii_string_by_rng(&mut rng, 10);
                 kv_pair.insert(k, v);
             }
             for (key, value) in kv_pair.iter() {
@@ -123,5 +131,101 @@ fn read_bench(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, write_bench, read_bench);
+fn get_kvs_server_by_config<E: KvsEngine, T: ThreadPool>(num_thread: u32) -> KvsServer<E, T> {
+    let ip_port = parse_ip_port("127.0.0.1:4000").unwrap();
+    let root_logger: slog::Logger = get_root_logger("kvs-server".to_string());
+    let pool = T::new(num_thread).unwrap();
+    KvsServer::new(ip_port, E::new().unwrap(), pool, root_logger).unwrap()
+}
+
+fn get_kvs_client() -> KvsClient {
+    let ip_port = parse_ip_port("127.0.0.1:4000").unwrap();
+    let root_logger: slog::Logger = get_root_logger("kvs-client".to_string());
+    KvsClient::new(ip_port, root_logger).unwrap()
+}
+
+fn run_write_bench(g: &mut BenchmarkGroup<WallTime>, name: &str) {
+    let mut rng = SmallRng::seed_from_u64(0);
+    let mut client = get_kvs_client();
+    g.bench_function(name, |b| {
+        let mut kv_pair = Vec::new();
+        for _ in 0..100 {
+            let k = get_random_ascii_string_by_rng(&mut rng, 10);
+            let v = k.clone();
+            kv_pair.push((k, v));
+        }
+        b.iter(|| {
+            for (key, value) in &kv_pair {
+                client
+                    .send(&Command::Set(key.clone(), value.clone()))
+                    .unwrap();
+            }
+        })
+    });
+}
+
+fn write_queued_kvstore(c: &mut Criterion) {
+    let mut group = c.benchmark_group("write_queued_kvstore");
+    group
+        .sample_size(10)
+        .measurement_time(std::time::Duration::from_secs(5));
+    for config in vec![
+        ("shared_queue_pool", "kvs"),
+        ("rayon", "kvs"),
+        ("rayon", "sled"),
+    ] {
+        for num_thread in vec![1, 2, 4, 8, 16, 32] {
+            match config {
+                ("shared_queue_pool", "kvs") => {
+                    // run server on another thread on benchtest will be block here
+                    // to-do: how to stop the server
+                    thread::spawn(move || {
+                        get_kvs_server_by_config::<KvStore, SharedQueueThreadPool>(num_thread)
+                            .run()
+                            .unwrap()
+                    });
+                    // wait for server to start
+                    thread::sleep(std::time::Duration::from_secs(3));
+                    run_write_bench(
+                        &mut group,
+                        &format!("{}_{}_{}", config.0, config.1, num_thread),
+                    );
+                }
+                ("rayon", "kvs") => {
+                    thread::spawn(move || {
+                        get_kvs_server_by_config::<KvStore, RayonThreadPool>(num_thread)
+                            .run()
+                            .unwrap()
+                    });
+                    // wait for server to start
+                    thread::sleep(std::time::Duration::from_secs(3));
+                    run_write_bench(
+                        &mut group,
+                        &format!("{}_{}_{}", config.0, config.1, num_thread),
+                    )
+                }
+                ("rayon", "sled") => {
+                    thread::spawn(move || {
+                        get_kvs_server_by_config::<SledKvsEngine, RayonThreadPool>(num_thread)
+                            .run()
+                            .unwrap()
+                    });
+                    // wait for server to start
+                    thread::sleep(std::time::Duration::from_secs(3));
+                    run_write_bench(
+                        &mut group,
+                        &format!("{}_{}_{}", config.0, config.1, num_thread),
+                    )
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
+// fn read_queued_kvstore(c: &mut Criterion) {
+//     let mut group = c.benchmark_group("read_queued_kvstore");
+// }
+
+criterion_group!(benches, write_queued_kvstore);
 criterion_main!(benches);

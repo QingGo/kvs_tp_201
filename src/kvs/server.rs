@@ -16,11 +16,11 @@ pub struct KvsServer<E: KvsEngine, T: ThreadPool> {
 }
 
 impl<E: KvsEngine, T: ThreadPool> KvsServer<E, T> {
-    pub fn new(ip_port: (std::net::IpAddr, u16), engine: E, logger: Logger) -> Result<Self> {
+    pub fn new(ip_port: (std::net::IpAddr, u16), engine: E, pool: T, logger: Logger) -> Result<Self> {
         // let (ip, port) = ip_port;
         let listener = TcpListener::bind(ip_port)?;
         info!(logger, "Listening on"; "addr" => format!("{:?}", ip_port));
-        let pool = T::new(num_cpus::get() as u32)?;
+        // let pool = T::new(num_cpus::get() as u32)?;
         Ok(KvsServer {
             logger,
             listener,

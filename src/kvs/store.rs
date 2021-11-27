@@ -45,6 +45,10 @@ struct KvDB {
 use super::engine::KvsEngine;
 
 impl KvsEngine for KvStore {
+    /// Open the KvStore at current path. Return the KvStore.
+    fn new() -> Result<KvStore> {
+        KvStore::open(current_dir()?)
+    }
     /// Set the value of a string key to a string. Return an error if the value is not written successfully.
     fn set(&self, key: String, value: String) -> Result<()> {
         let record = Record {
@@ -124,10 +128,6 @@ const TRIGGER_COMPACT_SIZE: u64 = 4 * 1024;
 // need to perform reads from the log at arbitrary offsets. Consider how that might impact the way you manage file handles.
 // compact the log file
 impl KvStore {
-    /// Open the KvStore at current path. Return the KvStore.
-    pub fn new() -> Result<KvStore> {
-        KvStore::open(current_dir()?)
-    }
     /// Open the KvStore at a given path. Return the KvStore.
     pub fn open(path: impl Into<PathBuf>) -> Result<KvStore> {
         let dir = path.into();
@@ -232,7 +232,7 @@ impl KvStore {
         let active_file = generate_new_file(&db.dir, active_file_id)?;
         db.file_handles.insert(active_file_id, active_file);
         db.active_file_id = active_file_id;
-        
+
         Ok(())
     }
 }
