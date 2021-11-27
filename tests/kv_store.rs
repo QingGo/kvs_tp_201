@@ -3,6 +3,7 @@ use std::sync::{Arc, Barrier};
 use std::thread;
 use tempfile::TempDir;
 use walkdir::WalkDir;
+use ntest::timeout;
 
 // Should get previously stored value
 #[test]
@@ -84,6 +85,7 @@ fn remove_key() -> Result<()> {
 // Insert data until total size of the directory decreases.
 // Test data correctness after compaction.
 #[test]
+#[timeout(30000)]
 fn compaction() -> Result<()> {
     let temp_dir = TempDir::new().expect("unable to create temporary working directory");
     let store = KvStore::open(temp_dir.path())?;
