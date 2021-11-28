@@ -1,8 +1,8 @@
 #![feature(backtrace)]
-use std::{backtrace::Backtrace, env::current_dir};
+use std::{backtrace::Backtrace};
 
 use clap::Parser;
-use kvs::{KvStore, KvsEngine, KvsError, Result};
+use kvs::{KvsError, Result, get_engine_by_name};
 
 #[derive(Parser)]
 #[clap(version = env!("CARGO_PKG_VERSION"), author = "QingGo")]
@@ -10,6 +10,8 @@ struct Opts {
     #[clap(short('V'))]
     // 更改了默认 -v 的行为
     version: bool,
+    #[clap(short('e'), default_value("kvs"))]
+    engine_name: String,
     command: String,
     key: String,
     value: Option<String>,
@@ -17,8 +19,7 @@ struct Opts {
 
 fn main() -> Result<()> {
     let opts: Opts = Opts::parse();
-    let db = KvStore::open(current_dir()?)?;
-    // db.set("key1".to_string(), "value2".to_string())?;
+    let db = get_engine_by_name(opts.engine_name.as_str());
 
     match opts.command.as_str() {
         "get" => {
