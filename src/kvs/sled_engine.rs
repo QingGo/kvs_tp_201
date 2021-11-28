@@ -41,6 +41,12 @@ impl KvsEngine for SledKvsEngine {
         self.db.flush()?;
         Ok(())
     }
+
+    fn clone(&self) -> Self {
+        SledKvsEngine {
+            db: self.db.clone(),
+        }
+    }
 }
 
 impl SledKvsEngine {

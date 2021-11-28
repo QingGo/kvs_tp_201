@@ -29,7 +29,6 @@ use super::error::KvsError;
 /// #   Ok(())
 /// # }
 /// ```
-#[derive(Clone)]
 pub struct KvStore {
     db: Arc<Mutex<KvDB>>,
 }
@@ -94,6 +93,12 @@ impl KvsEngine for KvStore {
         };
         self.clone().insert_record(record)?;
         Ok(())
+    }
+
+    fn clone(&self) -> Self {
+        KvStore {
+            db: self.db.clone(),
+        }
     }
 }
 
