@@ -1,5 +1,8 @@
 use anyhow::Result;
-use std::{cell::Cell, thread::{self, JoinHandle}};
+use std::{
+    cell::Cell,
+    thread::{self, JoinHandle},
+};
 
 use super::ThreadPool;
 
@@ -10,9 +13,7 @@ pub struct NaiveThreadPool {
 impl ThreadPool for NaiveThreadPool {
     fn new(_threads: u32) -> Result<Self> {
         let workers = Cell::new(Vec::new());
-        Ok(Self {
-            workers,
-        })
+        Ok(Self { workers })
     }
 
     fn spawn<F>(&self, job: F)
@@ -25,7 +26,7 @@ impl ThreadPool for NaiveThreadPool {
     }
 }
 
-impl NaiveThreadPool{
+impl NaiveThreadPool {
     #[allow(unused)]
     fn join(self) -> Result<()> {
         let workers = self.workers.take();
@@ -38,8 +39,8 @@ impl NaiveThreadPool{
 
 #[test]
 fn test() {
+    use std::thread::sleep;
     use std::time::Duration;
-    use std::thread::sleep; 
     let pool = NaiveThreadPool::new(4).unwrap();
     for i in 0..10 {
         pool.spawn(move || {

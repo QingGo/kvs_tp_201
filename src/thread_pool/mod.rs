@@ -1,11 +1,9 @@
-
-
 pub mod native;
-pub mod shared_queue;
 pub mod rayon;
+pub mod shared_queue;
+pub use self::rayon::*;
 pub use native::*;
 pub use shared_queue::*;
-pub use self::rayon::*;
 
 use anyhow::Result;
 pub trait ThreadPool {

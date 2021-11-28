@@ -1,9 +1,9 @@
 use kvs::{KvStore, KvsEngine, Result};
+use ntest::timeout;
 use std::sync::{Arc, Barrier};
 use std::thread;
 use tempfile::TempDir;
 use walkdir::WalkDir;
-use ntest::timeout;
 
 // Should get previously stored value
 #[test]

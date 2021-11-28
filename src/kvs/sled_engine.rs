@@ -29,7 +29,7 @@ impl KvsEngine for SledKvsEngine {
             .db
             .get(key)?
             .map(|value| String::from_utf8_lossy(&value).to_string());
-        
+
         Ok(result)
     }
 

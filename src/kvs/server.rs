@@ -1,3 +1,6 @@
+use crate::utils::get_root_logger;
+use crate::{KvStore, SledKvsEngine};
+
 use super::super::thread_pool::*;
 use super::error::Result;
 use slog::Logger;
@@ -8,6 +11,10 @@ use super::engine::KvsEngine;
 
 use super::protocol::{Command, Response};
 
+pub trait IKvsServer {
+    fn run(&mut self) -> Result<()>;
+}
+
 pub struct KvsServer<E: KvsEngine, T: ThreadPool> {
     logger: Logger,
     listener: TcpListener,
@@ -15,21 +22,38 @@ pub struct KvsServer<E: KvsEngine, T: ThreadPool> {
     pool: T,
 }
 
-impl<E: KvsEngine, T: ThreadPool> KvsServer<E, T> {
-    pub fn new(ip_port: (std::net::IpAddr, u16), engine: E, pool: T, logger: Logger) -> Result<Self> {
-        // let (ip, port) = ip_port;
-        let listener = TcpListener::bind(ip_port)?;
-        info!(logger, "Listening on"; "addr" => format!("{:?}", ip_port));
-        // let pool = T::new(num_cpus::get() as u32)?;
-        Ok(KvsServer {
-            logger,
-            listener,
-            engine,
-            pool,
-        })
-    }
+pub fn get_kvs_server_by_config<E: KvsEngine, T: ThreadPool>(
+    num_thread: u32,
+    ip_port: (std::net::IpAddr, u16),
+) -> KvsServer<E, T> {
+    let root_logger: slog::Logger = get_root_logger("kvs-server".to_string());
+    let pool = T::new(num_thread).unwrap();
+    KvsServer::new(ip_port, E::new().unwrap(), pool, root_logger).unwrap()
+}
 
-    pub fn run(&mut self) -> Result<()> {
+pub fn get_kvs_client_by_config_dyn(
+    num_thread: u32,
+    pool_name: &str,
+    engine_name: &str,
+    ip_port: (std::net::IpAddr, u16),
+) -> Box<dyn IKvsServer> {
+    match (pool_name, engine_name) {
+        ("shared_queue_pool", "kvs") => Box::new(get_kvs_server_by_config::<
+            KvStore,
+            SharedQueueThreadPool,
+        >(num_thread, ip_port)),
+        ("rayon", "kvs") => Box::new(get_kvs_server_by_config::<KvStore, RayonThreadPool>(
+            num_thread, ip_port,
+        )),
+        ("rayon", "sled") => Box::new(get_kvs_server_by_config::<SledKvsEngine, RayonThreadPool>(
+            num_thread, ip_port,
+        )),
+        _ => panic!("Unknown config"),
+    }
+}
+
+impl<E: KvsEngine, T: ThreadPool> IKvsServer for KvsServer<E, T> {
+    fn run(&mut self) -> Result<()> {
         for stream in self.listener.incoming() {
             let stream = stream?;
             let engine = self.engine.clone();
@@ -41,6 +65,26 @@ impl<E: KvsEngine, T: ThreadPool> KvsServer<E, T> {
             });
         }
         Ok(())
+    }
+}
+
+impl<E: KvsEngine, T: ThreadPool> KvsServer<E, T> {
+    pub fn new(
+        ip_port: (std::net::IpAddr, u16),
+        engine: E,
+        pool: T,
+        logger: Logger,
+    ) -> Result<Self> {
+        // let (ip, port) = ip_port;
+        let listener = TcpListener::bind(ip_port)?;
+        info!(logger, "Listening on"; "addr" => format!("{:?}", ip_port));
+        // let pool = T::new(num_cpus::get() as u32)?;
+        Ok(KvsServer {
+            logger,
+            listener,
+            engine,
+            pool,
+        })
     }
 }
 

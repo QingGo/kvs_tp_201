@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+extern crate crossbeam;
 // #![allow(unused_variables)]
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -6,9 +7,8 @@ use std::thread;
 
 use criterion::measurement::WallTime;
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkGroup, Criterion};
-use kvs::thread_pool::{RayonThreadPool, SharedQueueThreadPool, ThreadPool};
-use kvs::utils::*;
-use kvs::{Command, KvsClient, KvsServer, Result};
+use kvs::{get_kvs_client_by_config_dyn, utils::*};
+use kvs::{Command, KvsClient, Result};
 use kvs::{KvStore, KvsEngine, SledKvsEngine};
 use rand::prelude::*;
 use rand::{rngs::SmallRng, SeedableRng};
@@ -131,13 +131,6 @@ fn read_bench(c: &mut Criterion) {
     group.finish();
 }
 
-fn get_kvs_server_by_config<E: KvsEngine, T: ThreadPool>(num_thread: u32) -> KvsServer<E, T> {
-    let ip_port = parse_ip_port("127.0.0.1:4000").unwrap();
-    let root_logger: slog::Logger = get_root_logger("kvs-server".to_string());
-    let pool = T::new(num_thread).unwrap();
-    KvsServer::new(ip_port, E::new().unwrap(), pool, root_logger).unwrap()
-}
-
 fn get_kvs_client() -> KvsClient {
     let ip_port = parse_ip_port("127.0.0.1:4000").unwrap();
     let root_logger: slog::Logger = get_root_logger("kvs-client".to_string());
@@ -169,56 +162,30 @@ fn write_queued_kvstore(c: &mut Criterion) {
     group
         .sample_size(10)
         .measurement_time(std::time::Duration::from_secs(5));
+    let ip_port = parse_ip_port("127.0.0.1:4000").unwrap();
     for config in vec![
         ("shared_queue_pool", "kvs"),
         ("rayon", "kvs"),
         ("rayon", "sled"),
     ] {
         for num_thread in vec![1, 2, 4, 8, 16, 32] {
-            match config {
-                ("shared_queue_pool", "kvs") => {
-                    // run server on another thread on benchtest will be block here
-                    // to-do: how to stop the server
-                    thread::spawn(move || {
-                        get_kvs_server_by_config::<KvStore, SharedQueueThreadPool>(num_thread)
-                            .run()
-                            .unwrap()
-                    });
-                    // wait for server to start
-                    thread::sleep(std::time::Duration::from_secs(3));
-                    run_write_bench(
-                        &mut group,
-                        &format!("{}_{}_{}", config.0, config.1, num_thread),
-                    );
-                }
-                ("rayon", "kvs") => {
-                    thread::spawn(move || {
-                        get_kvs_server_by_config::<KvStore, RayonThreadPool>(num_thread)
-                            .run()
-                            .unwrap()
-                    });
-                    // wait for server to start
-                    thread::sleep(std::time::Duration::from_secs(3));
-                    run_write_bench(
-                        &mut group,
-                        &format!("{}_{}_{}", config.0, config.1, num_thread),
-                    )
-                }
-                ("rayon", "sled") => {
-                    thread::spawn(move || {
-                        get_kvs_server_by_config::<SledKvsEngine, RayonThreadPool>(num_thread)
-                            .run()
-                            .unwrap()
-                    });
-                    // wait for server to start
-                    thread::sleep(std::time::Duration::from_secs(3));
-                    run_write_bench(
-                        &mut group,
-                        &format!("{}_{}_{}", config.0, config.1, num_thread),
-                    )
-                }
-                _ => {}
-            }
+            // crossbeam::scope(|scope| {
+            //     scope.spawn(move |_| {
+            //         let mut engine = get_kvs_client_by_config_dyn(num_thread, config.0, config.1, ip_port);
+            //         engine.run().unwrap();
+            //     });
+            // }).unwrap();
+            thread::spawn(move || {
+                let mut engine =
+                    get_kvs_client_by_config_dyn(num_thread, config.0, config.1, ip_port);
+                engine.run().unwrap();
+            });
+            // wait for server to start
+            thread::sleep(std::time::Duration::from_secs(3));
+            run_write_bench(
+                &mut group,
+                &format!("{}_{}_{}", config.0, config.1, num_thread),
+            );
         }
     }
 }

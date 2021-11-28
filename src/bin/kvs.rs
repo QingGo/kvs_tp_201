@@ -1,8 +1,8 @@
 #![feature(backtrace)]
-use std::{backtrace::Backtrace};
+use std::backtrace::Backtrace;
 
 use clap::Parser;
-use kvs::{KvsError, Result, get_engine_by_name};
+use kvs::{get_engine_by_name, KvsError, Result};
 
 #[derive(Parser)]
 #[clap(version = env!("CARGO_PKG_VERSION"), author = "QingGo")]

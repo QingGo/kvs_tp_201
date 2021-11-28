@@ -8,6 +8,7 @@ extern crate anyhow;
 use clap::Parser;
 use kvs::thread_pool::{SharedQueueThreadPool, ThreadPool};
 use kvs::utils::*;
+use kvs::IKvsServer;
 use kvs::KvStore;
 use kvs::KvsEngine;
 use kvs::KvsServer;
