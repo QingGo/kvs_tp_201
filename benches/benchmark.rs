@@ -3,11 +3,13 @@ extern crate crossbeam;
 // #![allow(unused_variables)]
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::thread;
 
 use criterion::measurement::WallTime;
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkGroup, Criterion};
-use kvs::{get_kvs_client_by_config_dyn, utils::*};
+use kvs::thread_pool::{SharedQueueThreadPool, ThreadPool};
+use kvs::{utils::*, KvsServer, IKvsServer};
 use kvs::{Command, KvsClient, Result};
 use kvs::{KvStore, KvsEngine, SledKvsEngine};
 use rand::prelude::*;
@@ -169,23 +171,37 @@ fn write_queued_kvstore(c: &mut Criterion) {
         ("rayon", "sled"),
     ] {
         for num_thread in vec![1, 2, 4, 8, 16, 32] {
-            // crossbeam::scope(|scope| {
-            //     scope.spawn(move |_| {
-            //         let mut engine = get_kvs_client_by_config_dyn(num_thread, config.0, config.1, ip_port);
-            //         engine.run().unwrap();
-            //     });
-            // }).unwrap();
-            thread::spawn(move || {
-                let mut engine =
-                    get_kvs_client_by_config_dyn(num_thread, config.0, config.1, ip_port);
-                engine.run().unwrap();
-            });
+            let logger = get_root_logger(format!("{}-{}-{}", config.0, config.1, num_thread));
+            crossbeam::scope(|scope| {
+                // trait object is not imply Send trait, maybe I should use macro+generic later
+                let server = KvsServer::new(
+                    ip_port,
+                    KvStore::new().unwrap(),
+                    SharedQueueThreadPool::new(num_thread).unwrap(),
+                    logger,
+                ).unwrap();
+                let server_share = Arc::new(server);
+                let server_share_clone = server_share.clone();
+                scope.spawn(move |_| {
+                    server_share_clone.run().unwrap();
+                });
+                thread::sleep(std::time::Duration::from_secs(3));
+                println!("begin bench");
+                run_write_bench(
+                    &mut group,
+                    &format!("{}_{}_{}", config.0, config.1, num_thread),
+                );
+                println!("end bench");
+                server_share.close();
+            })
+            .unwrap();
+            // thread::spawn(move || {
+            //     let mut engine =
+            //         get_kvs_client_by_config_dyn(num_thread, config.0, config.1, ip_port);
+            //     engine.run().unwrap();
+            // });
             // wait for server to start
-            thread::sleep(std::time::Duration::from_secs(3));
-            run_write_bench(
-                &mut group,
-                &format!("{}_{}_{}", config.0, config.1, num_thread),
-            );
+
         }
     }
 }
