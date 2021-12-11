@@ -12,7 +12,7 @@ use std::io;
 use std::io::prelude::*;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 // use std::sync::Arc;
 use std::time;
 
@@ -30,7 +30,7 @@ use super::error::KvsError;
 /// # }
 /// ```
 pub struct KvStore {
-    db: Arc<Mutex<KvDB>>,
+    db: Arc<RwLock<KvDB>>,
 }
 
 struct KvDB {
@@ -74,7 +74,7 @@ impl KvsEngine for KvStore {
             uncompacted_size,
         };
         Ok(KvStore {
-            db: Arc::new(Mutex::new(kv_db)),
+            db: Arc::new(RwLock::new(kv_db)),
         })
     }
 
@@ -93,7 +93,7 @@ impl KvsEngine for KvStore {
     }
     /// Get the string value of a string key. If the key does not exist, return None. Return an error if the value is not read successfully.
     fn get(&self, key: String) -> Result<Option<String>> {
-        let db = self.db.lock().unwrap();
+        let db = self.db.read().unwrap();
         let index = db.indexes.get(&key);
         match index {
             Some(index) => {
@@ -165,7 +165,7 @@ const TRIGGER_COMPACT_SIZE: u64 = 4 * 1024;
 // compact the log file
 impl KvStore {
     fn insert_record(&mut self, record: Record) -> Result<()> {
-        let mut db = self.db.lock().unwrap();
+        let mut db = self.db.write().unwrap();
         let mut active_file = get_last_file(&db.file_handles, db.active_file_id)?;
         let old_pos = active_file.seek(std::io::SeekFrom::End(0))?;
         serde_json::to_writer(active_file, &record)?;

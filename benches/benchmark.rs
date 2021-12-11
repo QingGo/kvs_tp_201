@@ -296,7 +296,9 @@ fn read_queued_kvstore(c: &mut Criterion) {
     }
 }
 
-// when using normal big lock, multithread did not make performance better
+// when using normal big mutex lock, multithread did not make performance better
+// but even using rwlock did not imporve read performance, maybe there are some bug need to fix...
+// maybe client should use muti-thread to read/write
 
 criterion_group!(benches, read_queued_kvstore, write_queued_kvstore);
 criterion_main!(benches);
