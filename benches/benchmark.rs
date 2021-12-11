@@ -158,10 +158,35 @@ fn run_write_bench(g: &mut BenchmarkGroup<WallTime>, name: &str) {
     });
 }
 
+fn run_read_bench(g: &mut BenchmarkGroup<WallTime>, name: &str) {
+    let mut rng = SmallRng::seed_from_u64(0);
+    let mut client = get_kvs_client();
+    g.bench_function(name, |b| {
+        let mut kv_pair = Vec::new();
+        for _ in 0..100 {
+            let k = get_random_ascii_string_by_rng(&mut rng, 10);
+            let v = k.clone();
+            kv_pair.push((k, v));
+        }
+        for (key, value) in &kv_pair {
+            client
+                .send(&Command::Set(key.clone(), value.clone()))
+                .unwrap();
+        }
+        b.iter(|| {
+            for (key, value) in &kv_pair {
+                let result = client.send(&Command::Get(key.clone())).unwrap().unwrap();
+                assert_eq!(result, value.clone());
+            }
+        })
+    });
+}
+
 macro_rules! write_queued_kvstore_with_config_string {
     // cannot use string variable as type name here
-    ($pool_conf:ty, $engine_conf:ty, $ip_port:expr, $num_thread: expr, $group:expr) => {
-        let (ip_port, num_thread, mut group) = ($ip_port, $num_thread, $group);
+    ($pool_conf:ty, $engine_conf:ty, $bench_func:expr, $ip_port:expr, $num_thread: expr, $group:expr) => {
+        let (bench_func, ip_port, num_thread, mut group) =
+            ($bench_func, $ip_port, $num_thread, $group);
         let logger = get_root_logger(format!(
             "{}-{}-{}",
             stringify!($pool_conf),
@@ -184,7 +209,7 @@ macro_rules! write_queued_kvstore_with_config_string {
             // make should bench is run after server is started, is they a better way?
             thread::sleep(std::time::Duration::from_secs(1));
             println!("begin bench");
-            run_write_bench(
+            bench_func(
                 &mut group,
                 &format!(
                     "{}_{}_{}",
@@ -213,6 +238,7 @@ fn write_queued_kvstore(c: &mut Criterion) {
         write_queued_kvstore_with_config_string!(
             SharedQueueThreadPool,
             KvStore,
+            run_write_bench,
             ip_port,
             num_thread,
             &mut group
@@ -220,6 +246,7 @@ fn write_queued_kvstore(c: &mut Criterion) {
         write_queued_kvstore_with_config_string!(
             RayonThreadPool,
             KvStore,
+            run_write_bench,
             ip_port,
             num_thread,
             &mut group
@@ -227,6 +254,7 @@ fn write_queued_kvstore(c: &mut Criterion) {
         write_queued_kvstore_with_config_string!(
             RayonThreadPool,
             SledKvsEngine,
+            run_write_bench,
             ip_port,
             num_thread,
             &mut group
@@ -234,9 +262,41 @@ fn write_queued_kvstore(c: &mut Criterion) {
     }
 }
 
-// fn read_queued_kvstore(c: &mut Criterion) {
-//     let mut group = c.benchmark_group("read_queued_kvstore");
-// }
+fn read_queued_kvstore(c: &mut Criterion) {
+    let mut group = c.benchmark_group("read_queued_kvstore");
+    group
+        .sample_size(10)
+        .measurement_time(std::time::Duration::from_secs(5));
+    let ip_port = parse_ip_port("127.0.0.1:4000").unwrap();
+    for num_thread in vec![1, 2, 4, 8, 16, 32] {
+        write_queued_kvstore_with_config_string!(
+            SharedQueueThreadPool,
+            KvStore,
+            run_read_bench,
+            ip_port,
+            num_thread,
+            &mut group
+        );
+        write_queued_kvstore_with_config_string!(
+            RayonThreadPool,
+            KvStore,
+            run_read_bench,
+            ip_port,
+            num_thread,
+            &mut group
+        );
+        write_queued_kvstore_with_config_string!(
+            RayonThreadPool,
+            SledKvsEngine,
+            run_read_bench,
+            ip_port,
+            num_thread,
+            &mut group
+        );
+    }
+}
 
-criterion_group!(benches, write_queued_kvstore);
+// when using normal big lock, multithread did not make performance better
+
+criterion_group!(benches, read_queued_kvstore, write_queued_kvstore);
 criterion_main!(benches);
