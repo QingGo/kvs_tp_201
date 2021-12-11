@@ -5,7 +5,7 @@ use super::super::thread_pool::*;
 use super::error::Result;
 use slog::Logger;
 use std::io::{self, prelude::*};
-use std::net::{TcpListener, TcpStream};
+use std::net::{Shutdown, TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
 
@@ -161,6 +161,7 @@ pub fn serve(
         debug!(logger, "send response"; "response" => response_serialized.to_string());
         stream.write_all(response_serialized.as_bytes())?;
         if is_close.load(Ordering::SeqCst) {
+            stream.shutdown(Shutdown::Both)?;
             break;
         }
     }

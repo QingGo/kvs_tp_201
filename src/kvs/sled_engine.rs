@@ -18,6 +18,11 @@ impl KvsEngine for SledKvsEngine {
         Ok(SledKvsEngine { db })
     }
 
+    fn open(path: impl Into<PathBuf>) -> Result<Self> {
+        let db = sled::open(path.into())?;
+        Ok(SledKvsEngine { db })
+    }
+
     fn set(&self, key: String, value: String) -> Result<()> {
         self.db.insert(key, &*value)?;
         self.db.flush()?;
@@ -46,12 +51,5 @@ impl KvsEngine for SledKvsEngine {
         SledKvsEngine {
             db: self.db.clone(),
         }
-    }
-}
-
-impl SledKvsEngine {
-    pub fn open(path: impl Into<PathBuf>) -> Result<Self> {
-        let db = sled::open(path.into())?;
-        Ok(SledKvsEngine { db })
     }
 }

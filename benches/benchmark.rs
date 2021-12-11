@@ -7,8 +7,8 @@ use std::thread;
 
 use criterion::measurement::WallTime;
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkGroup, Criterion};
-use kvs::thread_pool::{SharedQueueThreadPool, ThreadPool};
-use kvs::{utils::*, KvsServer, IKvsServer};
+use kvs::thread_pool::{RayonThreadPool, SharedQueueThreadPool, ThreadPool};
+use kvs::{utils::*, IKvsServer, KvsServer};
 use kvs::{Command, KvsClient, Result};
 use kvs::{KvStore, KvsEngine, SledKvsEngine};
 use rand::prelude::*;
@@ -158,50 +158,79 @@ fn run_write_bench(g: &mut BenchmarkGroup<WallTime>, name: &str) {
     });
 }
 
+macro_rules! write_queued_kvstore_with_config_string {
+    // cannot use string variable as type name here
+    ($pool_conf:ty, $engine_conf:ty, $ip_port:expr, $num_thread: expr, $group:expr) => {
+        let (ip_port, num_thread, mut group) = ($ip_port, $num_thread, $group);
+        let logger = get_root_logger(format!(
+            "{}-{}-{}",
+            stringify!($pool_conf),
+            stringify!($engine_conf),
+            num_thread
+        ));
+        let temp_dir = TempDir::new().unwrap();
+        let server = KvsServer::new(
+            ip_port,
+            <$engine_conf as KvsEngine>::open(temp_dir.path()).unwrap(),
+            <$pool_conf as ThreadPool>::new(num_thread).unwrap(),
+            logger,
+        )
+        .unwrap();
+        crossbeam::scope(|scope| {
+            // not need to use arc cause server is not shared and will not be borrowed after scope
+            scope.spawn(|_| {
+                server.run().unwrap();
+            });
+            // make should bench is run after server is started, is they a better way?
+            thread::sleep(std::time::Duration::from_secs(1));
+            println!("begin bench");
+            run_write_bench(
+                &mut group,
+                &format!(
+                    "{}_{}_{}",
+                    stringify!($pool_conf),
+                    stringify!($engine_conf),
+                    num_thread
+                ),
+            );
+            println!("end bench");
+            // if server is not close, scope will never end
+            server.close();
+        })
+        .unwrap();
+        // should be droped here or port will be occupied in next test
+        drop(server);
+    };
+}
+
 fn write_queued_kvstore(c: &mut Criterion) {
     let mut group = c.benchmark_group("write_queued_kvstore");
     group
         .sample_size(10)
         .measurement_time(std::time::Duration::from_secs(5));
     let ip_port = parse_ip_port("127.0.0.1:4000").unwrap();
-    for config in vec![
-        ("shared_queue_pool", "kvs"),
-        ("rayon", "kvs"),
-        ("rayon", "sled"),
-    ] {
-        for num_thread in vec![1, 2, 4, 8, 16, 32] {
-            let logger = get_root_logger(format!("{}-{}-{}", config.0, config.1, num_thread));
-            // trait object is not imply Send trait, maybe I should use macro+generic later
-            let server = KvsServer::new(
-                ip_port,
-                KvStore::new().unwrap(),
-                SharedQueueThreadPool::new(num_thread).unwrap(),
-                logger,
-            ).unwrap();
-            crossbeam::scope(|scope| {
-                // not need to use arc cause server is not shared and will not be borrowed after scope
-                scope.spawn(|_| {
-                    server.run().unwrap();
-                });
-                thread::sleep(std::time::Duration::from_secs(3));
-                println!("begin bench");
-                run_write_bench(
-                    &mut group,
-                    &format!("{}_{}_{}", config.0, config.1, num_thread),
-                );
-                println!("end bench");
-            })
-            .unwrap();
-            // shoule move out of scope otherwise server may still be borrowed by inside threads will causing compile error
-            server.close();
-            // thread::spawn(move || {
-            //     let mut engine =
-            //         get_kvs_client_by_config_dyn(num_thread, config.0, config.1, ip_port);
-            //     engine.run().unwrap();
-            // });
-            // wait for server to start
-
-        }
+    for num_thread in vec![1, 2, 4, 8, 16, 32] {
+        write_queued_kvstore_with_config_string!(
+            SharedQueueThreadPool,
+            KvStore,
+            ip_port,
+            num_thread,
+            &mut group
+        );
+        write_queued_kvstore_with_config_string!(
+            RayonThreadPool,
+            KvStore,
+            ip_port,
+            num_thread,
+            &mut group
+        );
+        write_queued_kvstore_with_config_string!(
+            RayonThreadPool,
+            SledKvsEngine,
+            ip_port,
+            num_thread,
+            &mut group
+        );
     }
 }
 

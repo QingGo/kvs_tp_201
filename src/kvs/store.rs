@@ -48,6 +48,36 @@ impl KvsEngine for KvStore {
     fn new() -> Result<KvStore> {
         KvStore::open(current_dir()?)
     }
+
+    /// Open the KvStore at a given path. Return the KvStore.
+    fn open(path: impl Into<PathBuf>) -> Result<KvStore> {
+        let dir = path.into();
+        fs::create_dir_all(&dir)?;
+        let db_file_ids = get_db_files_ids(&dir)?;
+        let mut file_handles = get_file_handles(&dir, &db_file_ids)?;
+        // build index
+        let (indexes, uncompacted_size) = build_indexes(&mut file_handles)?;
+        let active_file_id: u64;
+        if db_file_ids.is_empty() {
+            // create new file
+            let file_handle = generate_new_file(&dir, 1)?;
+            file_handles.insert(1, file_handle);
+            active_file_id = 1;
+        } else {
+            active_file_id = *db_file_ids.last().unwrap();
+        }
+        let kv_db = KvDB {
+            active_file_id,
+            dir,
+            file_handles,
+            indexes,
+            uncompacted_size,
+        };
+        Ok(KvStore {
+            db: Arc::new(Mutex::new(kv_db)),
+        })
+    }
+
     /// Set the value of a string key to a string. Return an error if the value is not written successfully.
     fn set(&self, key: String, value: String) -> Result<()> {
         let record = Record {
@@ -134,35 +164,6 @@ const TRIGGER_COMPACT_SIZE: u64 = 4 * 1024;
 // need to perform reads from the log at arbitrary offsets. Consider how that might impact the way you manage file handles.
 // compact the log file
 impl KvStore {
-    /// Open the KvStore at a given path. Return the KvStore.
-    pub fn open(path: impl Into<PathBuf>) -> Result<KvStore> {
-        let dir = path.into();
-        fs::create_dir_all(&dir)?;
-        let db_file_ids = get_db_files_ids(&dir)?;
-        let mut file_handles = get_file_handles(&dir, &db_file_ids)?;
-        // build index
-        let (indexes, uncompacted_size) = build_indexes(&mut file_handles)?;
-        let active_file_id: u64;
-        if db_file_ids.is_empty() {
-            // create new file
-            let file_handle = generate_new_file(&dir, 1)?;
-            file_handles.insert(1, file_handle);
-            active_file_id = 1;
-        } else {
-            active_file_id = *db_file_ids.last().unwrap();
-        }
-        let kv_db = KvDB {
-            active_file_id,
-            dir,
-            file_handles,
-            indexes,
-            uncompacted_size,
-        };
-        Ok(KvStore {
-            db: Arc::new(Mutex::new(kv_db)),
-        })
-    }
-
     fn insert_record(&mut self, record: Record) -> Result<()> {
         let mut db = self.db.lock().unwrap();
         let mut active_file = get_last_file(&db.file_handles, db.active_file_id)?;

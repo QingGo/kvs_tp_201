@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use super::sled_engine::SledKvsEngine;
 use super::store::KvStore;
 
@@ -5,6 +7,10 @@ use super::error::Result;
 
 pub trait KvsEngine: Send + 'static {
     fn new() -> Result<Self>
+    where
+        Self: Sized;
+
+    fn open(path: impl Into<PathBuf>) -> Result<Self>
     where
         Self: Sized;
     fn clone(&self) -> Self
