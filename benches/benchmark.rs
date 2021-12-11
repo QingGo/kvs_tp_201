@@ -3,7 +3,6 @@ extern crate crossbeam;
 // #![allow(unused_variables)]
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::thread;
 
 use criterion::measurement::WallTime;
@@ -172,18 +171,17 @@ fn write_queued_kvstore(c: &mut Criterion) {
     ] {
         for num_thread in vec![1, 2, 4, 8, 16, 32] {
             let logger = get_root_logger(format!("{}-{}-{}", config.0, config.1, num_thread));
+            // trait object is not imply Send trait, maybe I should use macro+generic later
+            let server = KvsServer::new(
+                ip_port,
+                KvStore::new().unwrap(),
+                SharedQueueThreadPool::new(num_thread).unwrap(),
+                logger,
+            ).unwrap();
             crossbeam::scope(|scope| {
-                // trait object is not imply Send trait, maybe I should use macro+generic later
-                let server = KvsServer::new(
-                    ip_port,
-                    KvStore::new().unwrap(),
-                    SharedQueueThreadPool::new(num_thread).unwrap(),
-                    logger,
-                ).unwrap();
-                let server_share = Arc::new(server);
-                let server_share_clone = server_share.clone();
-                scope.spawn(move |_| {
-                    server_share_clone.run().unwrap();
+                // not need to use arc cause server is not shared and will not be borrowed after scope
+                scope.spawn(|_| {
+                    server.run().unwrap();
                 });
                 thread::sleep(std::time::Duration::from_secs(3));
                 println!("begin bench");
@@ -192,9 +190,10 @@ fn write_queued_kvstore(c: &mut Criterion) {
                     &format!("{}_{}_{}", config.0, config.1, num_thread),
                 );
                 println!("end bench");
-                server_share.close();
             })
             .unwrap();
+            // shoule move out of scope otherwise server may still be borrowed by inside threads will causing compile error
+            server.close();
             // thread::spawn(move || {
             //     let mut engine =
             //         get_kvs_client_by_config_dyn(num_thread, config.0, config.1, ip_port);
