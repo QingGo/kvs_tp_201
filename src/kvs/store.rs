@@ -129,7 +129,8 @@ struct Record {
 const TRIGGER_COMPACT_SIZE: u64 = 4 * 1024;
 
 // TO-DO: Buffer and batch write
-// maybe batch read is not necessary because the OS reads ~4kb block from disk into page cache every time
+// batch read using BufReader is necessary because although the OS reads ~4kb block from disk into page cache every time
+// but read is a system call which is realtively expensive
 // need to perform reads from the log at arbitrary offsets. Consider how that might impact the way you manage file handles.
 // compact the log file
 impl KvStore {
